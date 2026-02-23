@@ -2,6 +2,7 @@ from typing import Tuple
 import numpy as np
 from tree.param import Param
 from tree.node import Node
+from mini_shap.dumb_tree_shap import DumbassTreeShap3
 
 class SingleHistTreeBoost:
     def __init__(self, 
@@ -217,3 +218,9 @@ class SingleHistTreeBoost:
             nr = tab + f"-> R: {node.right}"
             print(nr)
             self._print_tree(node.right, depth + 1)
+    
+    def calculate_shap(self, X):
+        explainer = DumbassTreeShap3(model=self)
+        
+        return explainer.shap_values(X), explainer.expected_value
+

@@ -1,6 +1,7 @@
 from typing import Callable, Tuple
 import numpy as np
 from tree.single_hist_tree_boost import SingleHistTreeBoost
+from tree.single_hist_tree_boost_parallel import SingleHistTreeBoostParallel
 from objective.logistic_classification import LogisticClassification
 from sklearn.metrics import log_loss
 from common import common
@@ -18,7 +19,7 @@ class MiniXGBoostClassifier:
         n_estimators: int = 100,
         custom_loss: Callable[[np.ndarray, np.ndarray], np.float32] = None,
         verbose: bool = False,
-        eval_param: dict = dict(),
+        parallel: bool = False
     ):
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -32,7 +33,7 @@ class MiniXGBoostClassifier:
         self.objective = objective
         self.custom_loss = custom_loss
         self.verbose = verbose
-        self.eval_param = eval_param
+        self.parallel = parallel
 
     def _get_grad_and_hess(self, label: np.ndarray, y_pred: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if isinstance(self.objective, str):
@@ -64,12 +65,20 @@ class MiniXGBoostClassifier:
 
             match self.tree_method:
                 case "hist":
-                    tree = SingleHistTreeBoost(
-                        max_depth=self.max_depth,
-                        grad=grad,
-                        hess=hess,
-                        max_bin=self.max_bin,
-                    )
+                    if self.parallel:
+                        tree = SingleHistTreeBoostParallel(
+                            max_depth=self.max_depth,
+                            grad=grad,
+                            hess=hess,
+                            max_bin=self.max_bin,
+                        )
+                    else:
+                        tree = SingleHistTreeBoost(
+                            max_depth=self.max_depth,
+                            grad=grad,
+                            hess=hess,
+                            max_bin=self.max_bin,
+                        )
                 case _:
                     tree = SingleHistTreeBoost(
                         max_depth=self.max_depth,
@@ -100,6 +109,14 @@ class MiniXGBoostClassifier:
     def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         return (self.predict_proba(X) >= threshold).astype(int)
 
-    def eval_metrics(param: dict) -> dict:
-        res = dict()
+    def explain(self, X: np.ndarray) -> Tuple[np.ndarray, np.float32]:
+        expected_value = 0
+        total_shap_value = np.zeros_like(X)
+
+        for t in self.trees:
+            shap_val, exp_val = t.calculate_shap(X)
+            total_shap_value += self.learning_rate * shap_val
+            expected_value += self.learning_rate * exp_val
+        
+        return total_shap_value, expected_value
 

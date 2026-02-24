@@ -1,7 +1,6 @@
 from typing import Callable, Tuple
 import numpy as np
 from tree.single_hist_tree_boost import SingleHistTreeBoost
-from tree.single_hist_tree_boost_parallel import SingleHistTreeBoostParallel
 from objective.logistic_classification import LogisticClassification
 from sklearn.metrics import log_loss
 from common import common
@@ -65,20 +64,12 @@ class MiniXGBoostClassifier:
 
             match self.tree_method:
                 case "hist":
-                    if self.parallel:
-                        tree = SingleHistTreeBoostParallel(
-                            max_depth=self.max_depth,
-                            grad=grad,
-                            hess=hess,
-                            max_bin=self.max_bin,
-                        )
-                    else:
-                        tree = SingleHistTreeBoost(
-                            max_depth=self.max_depth,
-                            grad=grad,
-                            hess=hess,
-                            max_bin=self.max_bin,
-                        )
+                    tree = SingleHistTreeBoost(
+                        max_depth=self.max_depth,
+                        grad=grad,
+                        hess=hess,
+                        max_bin=self.max_bin,
+                    )
                 case _:
                     tree = SingleHistTreeBoost(
                         max_depth=self.max_depth,

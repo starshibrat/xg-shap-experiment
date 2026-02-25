@@ -110,4 +110,15 @@ class MiniXGBoostClassifier:
             expected_value += self.learning_rate * exp_val
         
         return total_shap_value, expected_value
+    
+    def explain_vectorized(self, X: np.ndarray) -> Tuple[np.ndarray, np.float32]:
+        expected_value = 0
+        total_shap_value = np.zeros_like(X)
+
+        for t in self.trees:
+            shap_val, exp_val = t.calculate_shap_vectorized(X)
+            total_shap_value += self.learning_rate * shap_val
+            expected_value += self.learning_rate * exp_val
+        
+        return total_shap_value, expected_value
 

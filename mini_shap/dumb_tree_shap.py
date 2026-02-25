@@ -34,10 +34,12 @@ class DumbassTreeShap3:
               zero_fraction: float,
               one_fraction: float,
               feature_index: int):
-    if self.verbose:
-      print(f"\nEXTEND unique_path: {unique_path}\nWITH zero_frac={zero_fraction}, one_frac={one_fraction}, feature_index={feature_index}")
-
+    
     l = len(unique_path)
+
+    if self.verbose:
+      print(f"\nEXTEND unique_path: {unique_path}\nWITH zero_frac={zero_fraction}, one_frac={one_fraction}, feature_index={feature_index}, l={l}")
+
     unique_path.append(PathElement(
         feature_index=feature_index,
         zero_fraction=zero_fraction,

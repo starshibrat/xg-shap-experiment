@@ -18,12 +18,20 @@ To be implemented
 Status\
 🟢 = done\
 🔶 = on progress\
-🔴 = halt
+🔴 = halt\
+🔨 = prototype (not sure done with it or no)
 
-| Feature | Priority | Status | Done On |
+| Feature | Priority | Status | Last Update |
 | --- | --- | --- | --- |
-| Full/halfly Vectorized Tree SHAP | High | 🔶 | - |
-| Parallelize Tree Boost | Low | 🔴 | - |
+| Full/halfly Vectorized Tree SHAP | High | 🔨 | 2026.02.25 |
+| Parallelize/Vectorize Tree Split | High | 🔴 | - |
 | More Objective Function | Medium | 🔴 | - |
 | More Parameter to Tweak | Low | 🔴 | - |
 | Evaluation function | Medium | 🔴 | - |
+| Sparsity aware split finding | Medium | 🔴 | - |
+---
+Development notes
+===
+2026.02.25 Faster tree explainer
+---
+The algorithm is still the same but using vectorization more than the former. The benchmark is not there yet, but I believe it's 50-100x faster with sacrificing the memory obviously. For now I put prototype status.

@@ -4,13 +4,15 @@ class Node:
         left=None,
         right=None,
         weight=None,
-        n_sample=None):
+        n_sample=None,
+        sample_indices=None):
         self.feature_index = feature_index
         self.threshold = threshold
         self.weight = weight
         self.right = right
         self.left = left
         self.n_sample = n_sample
+        self.sample_indices = sample_indices
 
     def is_leaf(self):
         return self.left is None and self.right is None and self.weight is not None

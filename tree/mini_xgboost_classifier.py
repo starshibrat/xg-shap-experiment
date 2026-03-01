@@ -20,6 +20,7 @@ class MiniXGBoostClassifier:
         custom_loss: Callable[[np.ndarray, np.ndarray], np.float32] = None,
         min_child_weight: float = 1.0,
         verbose: bool = False,
+        vectorized: bool = False,
     ):
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -34,6 +35,7 @@ class MiniXGBoostClassifier:
         self.custom_loss = custom_loss
         self.min_child_weight = min_child_weight
         self.verbose = verbose
+        self.vectorized = vectorized
 
     def _quantize_features(self, X):
 

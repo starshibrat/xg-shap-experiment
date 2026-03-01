@@ -1,20 +1,18 @@
-import copy
-from mini_shap.path import Path, PathElement
-from tree.regressor import HistDecisionTreeRegressor
 import numpy as np
+import concurrent.futures
+import os
+from common import common
 
 class StupidTreeExplainer:
-    def __init__(self, model: HistDecisionTreeRegressor, verbose=False):
-        self.model = model
-        tree_array = model.tree_to_array()
-        self.features = tree_array['features']
-        self.thresholds = tree_array['thresholds']
-        self.values = tree_array['values']
-        self.n_node_samples = tree_array['n_node_samples']
-        self.weighted_n_node_samples = tree_array['weighted_n_node_samples']
-        self.children_left = tree_array['children_left']
-        self.children_right = tree_array['children_right']
-        self.is_leaf = tree_array['is_leaf']
+    def __init__(self, model, verbose=False):
+        self.features = model.features
+        self.thresholds = model.thresholds
+        self.values = model.values
+        self.n_node_samples = model.n_node_samples
+        self.weighted_n_node_samples = model.weighted_n_node_samples
+        self.children_left = model.children_left
+        self.children_right = model.children_right
+        self.is_leaf = model.is_leaf
         self.expected_value = self._calc_expected_values()
         self.verbose = verbose
 
@@ -159,8 +157,6 @@ class StupidTreeExplainer:
         if zero_fraction == 0:
             return
 
-        # start_state = self._save_path_state(unique_path)
-        
 
         self._vectorized_extend(unique_path, zero_fraction, one_fraction, feature_index)
 
@@ -190,7 +186,6 @@ class StupidTreeExplainer:
 
             iz, io = 1.0, 1.0
             
-            # before_unwind_state = None
 
             for i in range(self._path_len(unique_path)):
                 if self.verbose:
@@ -238,8 +233,12 @@ class StupidTreeExplainer:
             self._restore_path_state(unique_path, checkpoint_path) 
 
             self._vectorized_recurse(right_indices, X, a, unique_path, iz * cold_frac_right, 0.0, split_index, phi)
+    
+    def _vectorized_recurse_iterative(
+            self, active_indices: np.ndarray, X: np.ndarray, node_index: int, unique_path: np.ndarray, zero_fraction: np.float32, one_fraction: np.float32, feature_index: int, phi: np.ndarray
+    ):
+        return
         
-        # self._restore_path_state(unique_path, start_state)
 
 
     def vectorized_shap_values(self, X: np.ndarray) -> np.ndarray:
@@ -256,3 +255,27 @@ class StupidTreeExplainer:
         self._vectorized_recurse(np.arange(0, X.shape[0]), X, 0, unique_path, 1.0, 1.0, -1, phi)
 
         return phi
+
+    def parallel_shap_values(self, X: np.ndarray, max_worker: int=0):
+        if max_worker == 0:
+            max_worker = os.cpu_count() - 1
+
+        splitter = np.array_split(X, max_worker)
+
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_worker
+        ) as executor:
+            for _, phi in zip(splitter, executor.map(self.vectorized_shap_values, splitter)):
+                print("DONE. phi", phi)
+
+    def parallel_shap_values2(self, X: np.ndarray, max_worker: int=0):
+        if max_worker == 0:
+            max_worker = os.cpu_count() - 1
+
+        splitter = np.array_split(X, max_worker)
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_worker
+        ) as executor:
+            for _, phi in zip(splitter, executor.map(self.vectorized_shap_values, splitter)):
+                print("DONE. phi", phi)

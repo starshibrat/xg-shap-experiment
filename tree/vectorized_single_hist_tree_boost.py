@@ -456,3 +456,13 @@ class VectorizedSingleHistTreeBoost:
 
         return explainer.vectorized_shap_values(X), explainer.expected_value
 
+    def calculate_shap_parallel(self, X):
+        explainer = StupidTreeExplainer(model=self)
+        explainer.parallel_shap_values(X)
+        return explainer.expected_value
+    
+    def calculate_shap_parallel2(self, X):
+        explainer = StupidTreeExplainer(model=self)
+        explainer.parallel_shap_values2(X)
+        return explainer.expected_value
+

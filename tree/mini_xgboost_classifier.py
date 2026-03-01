@@ -101,7 +101,6 @@ class MiniXGBoostClassifier:
                     )
 
             tree.fit(X_binned, bin_edges)
-            # new_pred = tree.predict(X)
             new_pred = tree.predict_train(len(y))
             strong_pred += self.learning_rate * new_pred
             self.trees.append(tree)
@@ -127,7 +126,7 @@ class MiniXGBoostClassifier:
         total_shap_value = np.zeros_like(X)
 
         for t in self.trees:
-            shap_val, exp_val = t.calculate_shap_vectorized(X)
+            shap_val, exp_val = t.calculate_shap_vectorized(X) if self.vectorized else t.calculate_shap(X)
             total_shap_value += self.learning_rate * shap_val
             expected_value += self.learning_rate * exp_val
         

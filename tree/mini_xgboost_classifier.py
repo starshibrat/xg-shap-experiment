@@ -1,14 +1,11 @@
 from typing import Callable, Tuple
 import numpy as np
-from tree.single_hist_tree_boost import SingleHistTreeBoost
 from tree.vectorized_single_hist_tree_boost import VectorizedSingleHistTreeBoost
 from objective.logistic_classification import LogisticClassification
 from sklearn.metrics import log_loss
 from common import common
 import concurrent.futures
-from multiprocessing import shared_memory
 import os
-import threading
 
 class MiniXGBoostClassifier:
     def __init__(self,

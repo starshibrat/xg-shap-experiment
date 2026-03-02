@@ -5,6 +5,10 @@ from tree.vectorized_single_hist_tree_boost import VectorizedSingleHistTreeBoost
 from objective.logistic_classification import LogisticClassification
 from sklearn.metrics import log_loss
 from common import common
+import concurrent.futures
+from multiprocessing import shared_memory
+import os
+import threading
 
 class MiniXGBoostClassifier:
     def __init__(self,
@@ -126,9 +130,30 @@ class MiniXGBoostClassifier:
         total_shap_value = np.zeros_like(X)
 
         for t in self.trees:
-            shap_val, exp_val = t.calculate_shap_vectorized(X) if self.vectorized else t.calculate_shap(X)
+            shap_val, exp_val = t.calculate_shap(X)
             total_shap_value += self.learning_rate * shap_val
             expected_value += self.learning_rate * exp_val
         
         return total_shap_value, expected_value
+    
+    def parallel_explain(self, X: np.ndarray, max_workers: int = 0) -> Tuple[np.ndarray, np.float32]:
+        expected_value = 0
+        total_shap_value = np.zeros_like(X)
 
+        if max_workers == 0:
+            max_workers = os.cpu_count() - 1
+        
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            futures = {
+                executor.submit(t.calculate_shap, X): t for t in self.trees
+            }
+
+            for future in concurrent.futures.as_completed(futures):
+                shap_val, exp_val = future.result()
+                total_shap_value += self.learning_rate * shap_val
+                expected_value += self.learning_rate * exp_val
+        
+        return total_shap_value, expected_value
+        

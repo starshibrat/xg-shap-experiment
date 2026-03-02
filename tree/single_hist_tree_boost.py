@@ -2,8 +2,7 @@ from typing import Tuple
 import numpy as np
 from tree.param import Param
 from tree.node import Node
-from mini_shap.dumb_tree_shap import DumbassTreeShap3
-from mini_shap.stupid_tree_shap import StupidTreeExplainer
+from mini_shap.dogwater_tree_shap import DogwaterTreeExplainer
 
 class SingleHistTreeBoost:
     def __init__(self, 
@@ -221,12 +220,8 @@ class SingleHistTreeBoost:
             self._print_tree(node.right, depth + 1)
     
     def calculate_shap(self, X):
-        explainer = DumbassTreeShap3(model=self)
+        explainer = DogwaterTreeExplainer(model=self)
         
         return explainer.shap_values(X), explainer.expected_value
     
-    def calculate_shap_vectorized(self, X):
-        explainer = StupidTreeExplainer(model=self)
-
-        return explainer.vectorized_shap_values(X), explainer.expected_value
 

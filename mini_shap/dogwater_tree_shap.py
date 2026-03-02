@@ -1,7 +1,4 @@
 import numpy as np
-import concurrent.futures
-import os
-from common import common
 
 class DogwaterTreeExplainer:
     def __init__(self, model, verbose=False):
@@ -64,7 +61,7 @@ class DogwaterTreeExplainer:
         new_path = np.array([feature_index, zero_fraction, one_fraction, new_pweight])
 
         if self.verbose:
-            print(f"\nEXTEND unique_path: {unique_path[:2]}\nWITH zero_frac={zero_fraction}, one_frac={one_fraction}, feature_index={feature_index}, l={l}")
+            print(f"\nEXTEND unique_path: {unique_path}\nWITH zero_frac={zero_fraction}, one_frac={one_fraction}, feature_index={feature_index}, l={l}")
             print(f"\nnew_path={new_path}")
         
         self._path_append(unique_path, new_path)
@@ -87,7 +84,7 @@ class DogwaterTreeExplainer:
         n = unique_path[l, 3]
 
         for j in range(l - 1, -1, -1):
-            if unique_path[0, path_index, 2] != 0:
+            if unique_path[path_index, 2] != 0:
                 tmp = unique_path[j, 3]
                 unique_path[j, 3] = n * (l + 1) / ((j + 1) * unique_path[path_index, 2])
                 n = tmp - unique_path[j, 3] * unique_path[path_index, 1] * (l - j) / (l + 1)
@@ -140,13 +137,13 @@ class DogwaterTreeExplainer:
         unique_path[:] = saved_path
 
         if self.verbose:
-            print(f"restored state={unique_path[:2]}")
+            print(f"restored state={unique_path}")
 
 
     def _vectorized_recurse(self, active_indices: np.ndarray, X: np.ndarray, node_index: int, unique_path: np.ndarray, zero_fraction: np.float32, one_fraction: np.float32, feature_index: int, phi: np.ndarray):
 
         if self.verbose:
-            print(f"START RECURSE. len(active_indices)= {len(active_indices)}. zero_fraction={zero_fraction}\none_fraction={one_fraction}\nunique_path={unique_path[:2]}\nfeature_index={feature_index}")
+            print(f"START RECURSE. len(active_indices)= {len(active_indices)}. zero_fraction={zero_fraction}\none_fraction={one_fraction}\nunique_path={unique_path}\nfeature_index={feature_index}")
 
         if len(active_indices) == 0:
             return

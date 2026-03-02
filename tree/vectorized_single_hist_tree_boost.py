@@ -69,132 +69,26 @@ class VectorizedSingleHistTreeBoost:
         return gain[best_gain_feature, best_gain_bin_index], best_gain_feature, best_gain_bin_index
     
 
-    # def fit(self, X_binned: np.ndarray, bin_edges: np.ndarray):
-    #     g, h = self.grad, self.hess
-    #     self.tree = Node()
-    #     n_features = X_binned.shape[1]
-    #     hist_g_root, hist_h_root = self._build_whole_histogram(
-    #         X_binned,
-    #         g, h,
-    #         n_features,
-    #     )
+    def _calculate_left_and_right_histogram(self, X_binned: np.ndarray, left_indices: np.ndarray, right_indices: np.ndarray, hist_g: np.ndarray, hist_h: np.ndarray, g: np.ndarray, h: np.ndarray, n_features: np.ndarray):
+        if len(left_indices) < len(right_indices):
+            hist_g_left, hist_h_left = self._build_whole_histogram(
+                X_binned[left_indices],
+                g[left_indices],
+                h[left_indices],
+                n_features,
+            )
+            hist_g_right, hist_h_right = hist_g - hist_g_left, hist_h - hist_h_left
+        else:
+            hist_g_right, hist_h_right = self._build_whole_histogram(
+                X_binned[right_indices],
+                g[right_indices],
+                h[right_indices],
+                n_features,
+            )
 
-    #     next_node_id = 0
-    #     root_id = next_node_id
-    #     next_node_id += 1
-
-    #     leaves = []
-    #     children_left = []
-    #     children_right = []
-    #     features = []
-    #     thresholds = []
-    #     values = []
-    #     n_node_samples = []
-    #     weighted_n_node_samples = []
-    #     is_leaf = []
-
-    #     queue = deque([(
-    #         self.tree,
-    #         root_id,
-    #         np.arange(len(X_binned)),
-    #         0, 
-    #         hist_g_root,
-    #         hist_h_root)]
-    #     )
-
-    #     while queue:
-    #         level_size = len(queue)
-
-    #         if queue[0][3] > self.max_depth:
-    #             break
-
-    #         for _ in range(level_size):
-
-    #             node, node_id, sample_indices, depth, hist_g, hist_h = queue.popleft()
-    #             n_sample = len(sample_indices)
-    #             node.n_sample = n_sample
-
-    #             children_left.append(-1)
-    #             children_right.append(-1)
-    #             is_leaf.append(0)
-    #             values.append(0)
-    #             weighted_n_node_samples.append(n_sample)
-    #             n_node_samples.append(n_sample)
-    #             features.append(-2)
-    #             thresholds.append(-2.0)
-
-    #             if depth == self.max_depth:
-    #                 weight = -np.sum(hist_g) / (np.sum(hist_h) + self.LAMBDA)
-    #                 node.weight = weight
-    #                 node.sample_indices = sample_indices
-    #                 leaves.append(node)
-    #                 is_leaf[node_id] = 1
-    #                 values[node_id] = weight
-    #                 continue
-
-    #             best_gain, best_gain_feature, best_gain_bin_index = self._find_best_split_feature_from_whole_histogram(hist_g, hist_h)
-
-    #             if best_gain > 0:
-    #                 threshold = bin_edges[best_gain_bin_index + 1, best_gain_feature]
-    #                 node.feature_index = best_gain_feature
-    #                 node.threshold = threshold
-
-    #                 features[node_id] = best_gain_feature
-    #                 thresholds[node_id] = threshold
-                    
-    #                 left_mask = X_binned[sample_indices, best_gain_feature] <= best_gain_bin_index
-    #                 left_indices = sample_indices[left_mask]
-    #                 right_indices = sample_indices[~left_mask]
-
-    #                 node.left, node.right = Node(), Node()
-
-    #                 if np.any(left_mask) and np.any(~left_mask):
-
-    #                     if len(left_indices) < len(right_indices):
-    #                         hist_g_left, hist_h_left = self._build_whole_histogram(
-    #                             X_binned[left_indices],
-    #                             g[left_indices],
-    #                             h[left_indices],
-    #                             n_features,
-    #                         )
-    #                         hist_g_right, hist_h_right = hist_g - hist_g_left, hist_h - hist_h_left
-    #                     else:
-    #                         hist_g_right, hist_h_right = self._build_whole_histogram(
-    #                             X_binned[right_indices],
-    #                             g[right_indices],
-    #                             h[right_indices],
-    #                             n_features,
-    #                         )
-
-    #                         hist_g_left, hist_h_left = hist_g - hist_g_right, hist_h - hist_h_right
-                        
-    #                     left_id = next_node_id
-    #                     next_node_id += 1
-
-    #                     queue.append((node.left, left_id, left_indices, depth + 1, hist_g_left, hist_h_left))
-
-    #                     right_id = next_node_id
-    #                     next_node_id += 1
-
-    #                     queue.append((node.right, right_id, right_indices, depth + 1, hist_g_right, hist_h_right))
-                        
-    #                     children_left[node_id] = left_id
-    #                     children_right[node_id] = right_id
-
-    #             else:
-    #                 node.weight = -np.sum(hist_g) / (np.sum(hist_h) + self.LAMBDA)
-    #                 node.sample_indices = sample_indices
-    #                 leaves.append(node)
+            hist_g_left, hist_h_left = hist_g - hist_g_right, hist_h - hist_h_right
         
-    #     self.leaves = leaves
-    #     self.children_left = np.array(children_left, dtype=np.intp)
-    #     self.children_right = np.array(children_right, dtype=np.intp)
-    #     self.features = np.array(features, dtype=np.intp)
-    #     self.thresholds = np.array(thresholds, dtype=np.float32)
-    #     self.values = np.array(values, dtype=np.float32)
-    #     self.n_node_samples = np.array(n_node_samples, dtype=np.uint32)
-    #     self.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.intp)
-    #     self.is_leaf = np.array(is_leaf, dtype=np.bool)
+        return hist_g_left, hist_h_left, hist_g_right, hist_h_right
 
     def fit(self, X_binned: np.ndarray, bin_edges: np.ndarray):
         g, h = self.grad, self.hess
@@ -277,24 +171,16 @@ class VectorizedSingleHistTreeBoost:
                 node.left, node.right = Node(), Node()
 
                 if np.any(left_mask) and np.any(~left_mask):
-                    if len(left_indices) < len(right_indices):
-                        hist_g_left, hist_h_left = self._build_whole_histogram(
-                                X_binned[left_indices],
-                                g[left_indices],
-                                h[left_indices],
-                                n_features,
-                        )
-                        hist_g_right, hist_h_right = hist_g - hist_g_left, hist_h - hist_h_left
-                    else:
-                        hist_g_right, hist_h_right = self._build_whole_histogram(
-                                X_binned[right_indices],
-                                g[right_indices],
-                                h[right_indices],
-                                n_features,
-                        )
-
-                        hist_g_left, hist_h_left = hist_g - hist_g_right, hist_h - hist_h_right
-                        
+                    hist_g_left, hist_h_left, hist_g_right, hist_h_right = self._calculate_left_and_right_histogram(
+                        X_binned,
+                        left_indices,
+                        right_indices,
+                        hist_g,
+                        hist_h,
+                        g,
+                        h,
+                        n_features,
+                    )
                     
                     stack.append((node.right, right_indices, depth + 1, hist_g_right, hist_h_right, node_id, False))
 

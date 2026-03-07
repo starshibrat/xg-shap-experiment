@@ -261,18 +261,6 @@ class VectorizedSingleHistTreeBoost:
             "is_leaf": np.array(is_leaf, dtype=np.bool)
         }
 
-    def _predict(
-        self,
-        node: Node,
-        X: np.ndarray,
-    ):
-        if node.is_leaf():
-            return node.weight
-
-        if X[node.feature_index] <= node.threshold:
-            return self._predict(node.left, X)
-        else:
-            return self._predict(node.right, X)
     
     def predict_train(
         self,

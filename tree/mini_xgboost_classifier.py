@@ -22,6 +22,7 @@ class MiniXGBoostClassifier:
         min_child_weight: float = 1.0,
         verbose: bool = False,
         vectorized: bool = False,
+        categorical_features: list[int]= [],
     ):
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -37,14 +38,19 @@ class MiniXGBoostClassifier:
         self.min_child_weight = min_child_weight
         self.verbose = verbose
         self.vectorized = vectorized
+        self.categorical_features = categorical_features
 
     def _quantize_features(self, X):
-
+        self.bin_categorical_features = np.bincount(self.categorical_features, minlength=X.shape[1]).astype(bool)
         percentiles = np.linspace(0, 100, self.max_bin + 1)
         bin_edges = np.percentile(X, percentiles, axis=0)
 
         X_binned = np.zeros_like(X, dtype=np.int32)
         for j in range(X.shape[1]):
+            if self.bin_categorical_features[j]:
+                X_binned[:, j] = X[:, j]
+                continue
+
             bins = np.digitize(X[:, j], bin_edges[:, j], right=True) - 1
             X_binned[:, j] = np.clip(bins, 0, self.max_bin - 1)
         
@@ -88,7 +94,9 @@ class MiniXGBoostClassifier:
                         max_bin=self.max_bin,
                         LAMBDA=self.LAMBDA,
                         GAMMA=self.GAMMA,
-                        min_child_weight=self.min_child_weight
+                        min_child_weight=self.min_child_weight,
+                        categorical_features=self.categorical_features,
+                        verbose=self.verbose,
                     )
                 case _:
                     tree = VectorizedSingleHistTreeBoost(
@@ -98,7 +106,9 @@ class MiniXGBoostClassifier:
                         max_bin=self.max_bin,
                         LAMBDA=self.LAMBDA,
                         GAMMA=self.GAMMA,
-                        min_child_weight=self.min_child_weight
+                        min_child_weight=self.min_child_weight,
+                        categorical_features=self.categorical_features,
+                        verbose=self.verbose,
                     )
 
             tree.fit(X_binned, bin_edges)

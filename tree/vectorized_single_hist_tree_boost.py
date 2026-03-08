@@ -13,6 +13,8 @@ class VectorizedSingleHistTreeBoost:
                 LAMBDA: np.float32 = 1e-9,
                 GAMMA: np.float32 = 1e-9,
                 min_child_weight: float = 1.0,
+                categorical_features: list[int] = [],
+                verbose: bool = False,
         ):
         self.max_depth = max_depth
         self.grad = grad
@@ -24,6 +26,7 @@ class VectorizedSingleHistTreeBoost:
         self.GAMMA = GAMMA
         self.min_child_weight = min_child_weight
         self.leaves = None
+        self.verbose = verbose
 
         self.children_left = None
         self.children_right = None
@@ -33,11 +36,39 @@ class VectorizedSingleHistTreeBoost:
         self.n_node_samples = None
         self.weighted_n_node_samples = None
         self.is_leaf = None
+        self.categorical_features = categorical_features
+        self.is_categorical = None
+
+    def _sort_categorical_features(self, hist_g: np.ndarray, hist_h: np.ndarray, num_feature: int):
+        if len(self.categorical_features) == 0:
+            return None
+
+        bin_categorical_features = np.bincount(self.categorical_features, minlength=num_feature).astype(bool)
+        ratios = hist_g[bin_categorical_features]/(hist_h[bin_categorical_features] + 1e-7)
+        sort_idx = np.argsort(ratios, axis=1)
+
+        categorical_sort_idx = np.zeros_like(hist_g, dtype=np.uint8)
+
+        rows = np.arange(len(self.categorical_features))[:, None]
+        hist_g[bin_categorical_features] = hist_g[bin_categorical_features][rows, sort_idx]
+        hist_h[bin_categorical_features] = hist_h[bin_categorical_features][rows, sort_idx]
+
+        categorical_sort_idx[bin_categorical_features] = sort_idx
+
+        if self.verbose:
+            print("\n===SORT CATEGORICAL FEATURES===")
+            print("hist_g")
+            print(hist_g)
+            print("hist_h")
+            print(hist_h)
+            print("categorical_sort_idx")
+            print(categorical_sort_idx)
+
+
+        return categorical_sort_idx
+
 
     def _build_whole_histogram(self, binned_X, g, h, num_feature) -> Tuple[np.ndarray, np.ndarray]:
-        # feature 1 bin: 0 ~ (max_bin - 1)
-        # feature 2 bin: max_bin ~ (max_bin*2 - 1)
-
         flat_indices = (binned_X + np.arange(num_feature) * self.max_bin).ravel()
         flat_g = np.repeat(g, num_feature)
         flat_h = np.repeat(h, num_feature)
@@ -45,7 +76,9 @@ class VectorizedSingleHistTreeBoost:
         hist_g = np.bincount(flat_indices,weights=flat_g, minlength=num_feature*self.max_bin).reshape((num_feature, self.max_bin))
         hist_h = np.bincount(flat_indices, weights=flat_h, minlength=num_feature*self.max_bin).reshape((num_feature, self.max_bin))
 
-        return hist_g, hist_h
+        categorical_sort_idx = self._sort_categorical_features(hist_g, hist_h, num_feature)
+
+        return hist_g, hist_h, categorical_sort_idx
 
     def _find_best_split_feature_from_whole_histogram(self, hist_g, hist_h) -> Tuple[np.float32, np.int32]:
         sum_grad = np.cumsum(hist_g, axis=1)
@@ -64,6 +97,10 @@ class VectorizedSingleHistTreeBoost:
         valid_split_mask = (sum_hess >= self.min_child_weight) & (sum_h_right >= self.min_child_weight)
         gain = np.where(valid_split_mask[:, :-1], gain, -np.inf)
 
+        if self.verbose:
+            print(f"====GAIN ARRAY====")
+            print(gain)
+
         best_gain_feature, best_gain_bin_index = np.unravel_index(np.argmax(gain), shape=gain.shape)
 
         return gain[best_gain_feature, best_gain_bin_index], best_gain_feature, best_gain_bin_index
@@ -71,15 +108,19 @@ class VectorizedSingleHistTreeBoost:
 
     def _calculate_left_and_right_histogram(self, X_binned: np.ndarray, left_indices: np.ndarray, right_indices: np.ndarray, hist_g: np.ndarray, hist_h: np.ndarray, g: np.ndarray, h: np.ndarray, n_features: np.ndarray):
         if len(left_indices) < len(right_indices):
-            hist_g_left, hist_h_left = self._build_whole_histogram(
+            if self.verbose:
+                print(f"g={g}\nleft_indices={left_indices}")
+
+            hist_g_left, hist_h_left, categorical_sort_idx_left = self._build_whole_histogram(
                 X_binned[left_indices],
                 g[left_indices],
                 h[left_indices],
                 n_features,
             )
             hist_g_right, hist_h_right = hist_g - hist_g_left, hist_h - hist_h_left
+            categorical_sort_idx_right = self._sort_categorical_features(hist_g_right, hist_h_right, n_features)
         else:
-            hist_g_right, hist_h_right = self._build_whole_histogram(
+            hist_g_right, hist_h_right, categorical_sort_idx_right = self._build_whole_histogram(
                 X_binned[right_indices],
                 g[right_indices],
                 h[right_indices],
@@ -87,18 +128,25 @@ class VectorizedSingleHistTreeBoost:
             )
 
             hist_g_left, hist_h_left = hist_g - hist_g_right, hist_h - hist_h_right
+            categorical_sort_idx_left = self._sort_categorical_features(hist_g_left, hist_h_left, n_features)
         
-        return hist_g_left, hist_h_left, hist_g_right, hist_h_right
+        return hist_g_left, hist_h_left, categorical_sort_idx_left, hist_g_right, hist_h_right, categorical_sort_idx_right
 
     def fit(self, X_binned: np.ndarray, bin_edges: np.ndarray):
         g, h = self.grad, self.hess
         self.tree = Node()
         n_features = X_binned.shape[1]
-        hist_g_root, hist_h_root = self._build_whole_histogram(
+        hist_g_root, hist_h_root, categorical_sort_idx_root = self._build_whole_histogram(
             X_binned,
             g, h,
             n_features,
         )
+
+        if self.verbose:
+            print("====FITTING START====")
+            print(f"categorical features={self.categorical_features}")
+            print(f"hist_g_root={hist_g_root}")
+            print(f"hist_h_root={hist_h_root}")
 
         leaves = []
         children_left = []
@@ -109,6 +157,7 @@ class VectorizedSingleHistTreeBoost:
         n_node_samples = []
         weighted_n_node_samples = []
         is_leaf = []
+        is_categorical = []
 
         stack = [(
             self.tree,
@@ -116,16 +165,20 @@ class VectorizedSingleHistTreeBoost:
             0, 
             hist_g_root,
             hist_h_root,
+            categorical_sort_idx_root,
             -1,
             False,
-            )]
+        )]
         
         node_count = 0
 
         while stack:
-            node, sample_indices, depth, hist_g, hist_h, parent_id, is_left = stack.pop()
+            node, sample_indices, depth, hist_g, hist_h, categorical_sort_idx, parent_id, is_left = stack.pop()
             node_id = node_count
             node_count += 1
+
+            if self.verbose:
+                print(f"\nprocessing node_id={node_id}\nwith sample_indices: {sample_indices[:3]}...")
 
             if parent_id != -1:
                 if is_left:
@@ -139,6 +192,7 @@ class VectorizedSingleHistTreeBoost:
             children_left.append(-1)
             children_right.append(-1)
             is_leaf.append(0)
+            is_categorical.append(0)
             values.append(0)
             weighted_n_node_samples.append(n_sample)
             n_node_samples.append(n_sample)
@@ -156,22 +210,37 @@ class VectorizedSingleHistTreeBoost:
 
             best_gain, best_gain_feature, best_gain_bin_index = self._find_best_split_feature_from_whole_histogram(hist_g, hist_h)
 
-            if best_gain > 0:
-                threshold = bin_edges[best_gain_bin_index + 1, best_gain_feature]
-                node.feature_index = best_gain_feature
-                node.threshold = threshold
+            if self.verbose:
+                print("====GAIN====")
+                print(f"found best_gain={best_gain}\nbest_gain_feature={best_gain_feature}\nbest_gain_bin_index={best_gain_bin_index}")
 
+            if best_gain > 0:
+                if best_gain_feature in self.categorical_features:
+                    node.is_categorical = True
+                    is_categorical[node_id] = 1
+                    mask = hist_h[best_gain_feature, :best_gain_bin_index+1] > 0
+                    threshold = categorical_sort_idx[best_gain_feature, :best_gain_bin_index+1][mask]
+                    left_mask = np.isin(X_binned[sample_indices, best_gain_feature], threshold)
+                else:
+                    threshold = bin_edges[best_gain_bin_index + 1, best_gain_feature]
+                    left_mask = X_binned[sample_indices, best_gain_feature] <= best_gain_bin_index
+                    
+                node.threshold = threshold
+                node.feature_index = best_gain_feature
                 features[node_id] = best_gain_feature
                 thresholds[node_id] = threshold
 
-                left_mask = X_binned[sample_indices, best_gain_feature] <= best_gain_bin_index
+                
                 left_indices = sample_indices[left_mask]
                 right_indices = sample_indices[~left_mask]
+                
+                if self.verbose:
+                    print(f"Splitted on threshold={threshold}\nleft_indices={left_indices[:3]}...\nright_indices={right_indices[:3]}...")
 
                 node.left, node.right = Node(), Node()
 
                 if np.any(left_mask) and np.any(~left_mask):
-                    hist_g_left, hist_h_left, hist_g_right, hist_h_right = self._calculate_left_and_right_histogram(
+                    hist_g_left, hist_h_left, categorical_sort_idx_left, hist_g_right, hist_h_right, categorical_sort_idx_right = self._calculate_left_and_right_histogram(
                         X_binned,
                         left_indices,
                         right_indices,
@@ -182,9 +251,9 @@ class VectorizedSingleHistTreeBoost:
                         n_features,
                     )
                     
-                    stack.append((node.right, right_indices, depth + 1, hist_g_right, hist_h_right, node_id, False))
+                    stack.append((node.right, right_indices, depth + 1, hist_g_right, hist_h_right, categorical_sort_idx_right, node_id, False))
 
-                    stack.append((node.left, left_indices, depth + 1, hist_g_left, hist_h_left, node_id, True))
+                    stack.append((node.left, left_indices, depth + 1, hist_g_left, hist_h_left, categorical_sort_idx_left, node_id, True))
                 else:
                     weight = -np.sum(hist_g) / (np.sum(hist_h) + self.LAMBDA)
                     node.weight = weight
@@ -204,63 +273,12 @@ class VectorizedSingleHistTreeBoost:
         self.children_left = np.array(children_left, dtype=np.intp)
         self.children_right = np.array(children_right, dtype=np.intp)
         self.features = np.array(features, dtype=np.intp)
-        self.thresholds = np.array(thresholds, dtype=np.float32)
+        self.thresholds = thresholds
         self.values = np.array(values, dtype=np.float32)
         self.n_node_samples = np.array(n_node_samples, dtype=np.uint32)
         self.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.intp)
         self.is_leaf = np.array(is_leaf, dtype=np.bool)
-
-    def tree_to_array(self):
-        children_left = []
-        children_right = []
-        features = []
-        thresholds = []
-        values = []
-        n_node_samples = []
-        weighted_n_node_samples = []
-        is_leaf = []
-
-        node_count = 0
-
-        def walk(node: Node):
-            nonlocal node_count
-
-            node_id = node_count
-            node_count += 1
-
-            children_left.append(-1)
-            children_right.append(-1)
-            features.append(node.feature_index if node.feature_index is not None else -2)
-            thresholds.append(node.threshold if node.threshold is not None else -2.0)
-            n_node_samples.append(node.n_sample if node.n_sample is not None else 0)
-            weighted_n_node_samples.append(float(node.n_sample))
-            is_leaf.append(1)
-
-            values.append(node.weight if node.weight is not None else 0.0)
-
-            if not node.is_leaf():
-                is_leaf[node_id] = 0
-                if node.left:
-                    children_left[node_id] = node_count
-                    walk(node.left)
-
-                if node.right:
-                    children_right[node_id] = node_count
-                    walk(node.right)
-
-        walk(self.tree)
-
-        return {
-            "children_left": np.array(children_left, dtype=np.intp),
-            "children_right": np.array(children_right, dtype=np.intp),
-            "features": np.array(features, dtype=np.intp),
-            "thresholds": np.array(thresholds, dtype=np.float64),
-            "values": np.array(values, dtype=np.float64),
-            "n_node_samples": np.array(n_node_samples, dtype=np.intp),
-            "weighted_n_node_samples": np.array(weighted_n_node_samples, dtype=np.float64),
-            "is_leaf": np.array(is_leaf, dtype=np.bool)
-        }
-
+        self.is_categorical = np.array(is_categorical, dtype=np.bool)
     
     def predict_train(
         self,
@@ -273,7 +291,6 @@ class VectorizedSingleHistTreeBoost:
         
         return y_pred
 
-
     def predict(self, X: np.ndarray) -> np.ndarray:
         res = np.zeros(shape=(X.shape[0],), dtype=np.float32)
 
@@ -285,7 +302,10 @@ class VectorizedSingleHistTreeBoost:
                 res[sample_indices] = self.values[node_index]
                 continue
 
-            left_mask = X[sample_indices, self.features[node_index]] <= self.thresholds[node_index]
+            if self.is_categorical[node_index]:
+                left_mask = np.isin(X[sample_indices, self.features[node_index]], self.thresholds[node_index])
+            else:
+                left_mask = X[sample_indices, self.features[node_index]] <= self.thresholds[node_index]
 
             left_indices = sample_indices[left_mask]
             right_indices = sample_indices[~left_mask]
@@ -294,7 +314,6 @@ class VectorizedSingleHistTreeBoost:
             queue.append((self.children_right[node_index], right_indices))
         
         return res
-
 
     def print_tree(self):
         self._print_tree(self.tree, 1, with_parent=True)

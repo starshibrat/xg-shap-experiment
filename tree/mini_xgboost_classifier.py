@@ -40,19 +40,32 @@ class MiniXGBoostClassifier:
         self.vectorized = vectorized
         self.categorical_features = categorical_features
 
-    def _quantize_features(self, X):
+    def _quantize_features(self, X: np.ndarray):
+        nan_mask = np.isnan(X)
+        nan_indices = np.argwhere(nan_mask)[:, 1]
+        column_min_val = np.nanmin(X, axis=0)
+
+        Xc = X.copy()
+        Xc[nan_mask] = column_min_val[nan_indices]
+
         self.bin_categorical_features = np.bincount(self.categorical_features, minlength=X.shape[1]).astype(bool)
         percentiles = np.linspace(0, 100, self.max_bin + 1)
-        bin_edges = np.percentile(X, percentiles, axis=0)
+        bin_edges = np.percentile(Xc, percentiles, axis=0)
 
-        X_binned = np.zeros_like(X, dtype=np.int32)
+        X_binned = np.zeros_like(Xc, dtype=np.int32)
         for j in range(X.shape[1]):
             if self.bin_categorical_features[j]:
-                X_binned[:, j] = X[:, j]
+                X_binned[:, j] = Xc[:, j]
                 continue
 
-            bins = np.digitize(X[:, j], bin_edges[:, j], right=True) - 1
+            bins = np.digitize(Xc[:, j], bin_edges[:, j], right=True) - 1
             X_binned[:, j] = np.clip(bins, 0, self.max_bin - 1)
+        
+        X_binned[nan_mask] = self.max_bin
+
+        if self.verbose:
+            print("X_binned=", X_binned)
+            print("bin_edges=", bin_edges)
         
         return X_binned, bin_edges
 

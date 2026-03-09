@@ -23,6 +23,7 @@ class MiniXGBoostClassifier:
         verbose: bool = False,
         vectorized: bool = False,
         categorical_features: list[int]= [],
+        scale_pos_weight=1.0,
     ):
         self.max_depth = max_depth
         self.learning_rate = learning_rate
@@ -39,6 +40,7 @@ class MiniXGBoostClassifier:
         self.verbose = verbose
         self.vectorized = vectorized
         self.categorical_features = categorical_features
+        self.scale_pos_weight = scale_pos_weight
 
     def _quantize_features(self, X: np.ndarray):
         nan_mask = np.isnan(X)
@@ -75,7 +77,15 @@ class MiniXGBoostClassifier:
                 case "binary:logistic":
                     obj = LogisticClassification(label, y_pred)
 
-                    return obj.first_order_gradient(), obj.second_order_gradient()
+                    g = obj.first_order_gradient()
+                    h = obj.second_order_gradient()
+
+                    if self.scale_pos_weight != 1.0:
+                        positive_mask = (label == 1)
+                        g[positive_mask] *= self.scale_pos_weight
+                        h[positive_mask] *= self.scale_pos_weight
+
+                    return g, h
         else:
             return self.objective(label, y_pred)
     

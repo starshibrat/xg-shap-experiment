@@ -10,6 +10,9 @@ class DogwaterTreeExplainer:
         self.children_left = model.children_left
         self.children_right = model.children_right
         self.is_leaf = model.is_leaf
+        self.categorical_features = model.categorical_features
+        self.is_categorical = model.is_categorical
+        self.missing_go_left = model.missing_go_left
         self.expected_value = self._calc_expected_values()
         self.verbose = verbose
 
@@ -28,8 +31,6 @@ class DogwaterTreeExplainer:
 
     def _path_len(self, unique_path: np.ndarray) -> np.int64:
         target_index = np.argmin(unique_path, axis=0)[0]
-        # print("target_index:", target_index)
-        # print("repr_path:", representative_path)
 
         if unique_path[target_index][0] != -2:
             return len(unique_path)
@@ -174,9 +175,22 @@ class DogwaterTreeExplainer:
             split_index = self.features[node_index]
             threshold = self.thresholds[node_index]
 
-            go_left_mask = X[active_indices, split_index] <= threshold
-            left_indices = active_indices[go_left_mask]
-            right_indices = active_indices[~go_left_mask]
+            nan_mask = np.isnan(X[active_indices, split_index])
+
+            if self.is_categorical[node_index]:
+                go_left_mask = np.isin(X[active_indices, split_index], threshold)
+            else:
+                go_left_mask = X[active_indices, split_index] <= threshold
+            
+            missing_indices = active_indices[nan_mask]
+            left_indices = active_indices[go_left_mask & ~nan_mask]
+            right_indices = active_indices[~go_left_mask & ~nan_mask]
+
+            if self.missing_go_left[node_index]:
+                left_indices = np.concatenate((left_indices, missing_indices), axis=0)
+            else:
+                right_indices = np.concatenate((right_indices, missing_indices), axis=0)
+            
 
             iz, io = 1.0, 1.0
             

@@ -370,12 +370,20 @@ def build_cast_column_filter(dataset_name: int, columns: list[str], cast=pl.UInt
 
     return fls
 
-def build_diabetes_filter(dataset_name: int) -> pl.Expr:
+def build_diabetes_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
     col = get_value_from_universal_dict(dataset_name, "diabetes")
     a = build_filter(col, "notin", [1, 3, 4])
     b = build_filter(col, "isnull")
     ft = build_chain_filter([a, b], "|")
-    return ft
+
+    lf = lf.remove(ft)
+
+    ft2 = build_filter(col, "eq", 1)
+    ft2 = build_when(ft2, col, 1, 0)
+
+    lf = lf.with_columns(ft2)
+
+    return lf
 
 def build_income_filter(dataset_name: int) -> pl.Expr:
     col = get_value_from_universal_dict(dataset_name, "income")
@@ -454,8 +462,9 @@ def clean_dataset(dataset_name: int):
         missing_columns='insert'
     )
 
-    diabetes_filter = build_diabetes_filter(dataset_name)
-    lf = lf.remove(diabetes_filter)
+    # diabetes_filter = build_diabetes_filter(dataset_name)
+    # lf = lf.remove(diabetes_filter)
+    lf = build_diabetes_filter(lf, dataset_name)
 
     missing_filter = build_missing_dataset_filter(dataset_name, skip_columns=["age"])
 

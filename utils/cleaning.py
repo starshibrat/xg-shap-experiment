@@ -157,7 +157,7 @@ mp_common = {
     "blind": "BLIND",
     "concentration": "DECIDE",
     "diffwalk": "DIFFWALK",
-    "diffdress": "DIFFDRES",
+    "diffdres": "DIFFDRES",
     "diffalon": "DIFFALON",
     "heart": "_MICHD",
     "stroke": "CVDSTRK3",
@@ -178,7 +178,7 @@ mp_common_missing = {
     'blind': [7, 9, None],
     'concentration': [7, 9, None],
     'diffwalk': [7, 9, None],
-    'diffdress': [7, 9, None],
+    'diffdres': [7, 9, None],
     'diffalon': [7, 9, None],
     'heart': [None],
     'stroke': [7, 9, None],
@@ -221,6 +221,15 @@ mp_2023_missing = {
     "highchol": [9, None],
     "sex": [],
 }
+
+disability = [
+    "deaf", "blind", "concentration", "diffwalk", "diffdres", "diffalon"
+]
+
+chronic_condition = [
+    "heart", "stroke", "asthma", "arthritis", "skincancer", "otcancer",
+    "emphysema", "kidney", "depression", 
+]
 
 def get_map(dataset_name: int) -> dict:
     """
@@ -351,7 +360,7 @@ def build_missing_dataset_filter(dataset_name: int, skip_columns: list[str]=[]) 
     return ls_when
 
 
-def build_cast_column_filter(dataset_name: int, columns: list[str], cast=pl.UInt8) -> pl.Expr:
+def build_cast_column_filter(dataset_name: int, columns: list[str], cast=pl.UInt8) -> list[pl.Expr]:
     fls = []
 
     for c in columns:
@@ -378,23 +387,62 @@ def build_rename_filter(dataset_name: int) -> dict:
     rename_mp = {}
     mp = get_map(dataset_name)
 
+
     for k, v in mp.items():
         rename_mp[v] = k.upper()
     
     for k, v in mp_common.items():
         rename_mp[v] = k.upper()
     
+    rename_mp["TOTAL_COMORBIDITY"] = "TOTAL_COMORBIDITY"
+    rename_mp["TOTAL_DISABILITY"] = "TOTAL_DISABILITY"
+
+    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
+    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
+
     return rename_mp
 
-def build_drop_unused_columns_filter(all_columns: list[str], used_columns: list[str]) -> list[str]:
-    filtered_columns = []
+def build_comorbidity_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    count_columns = []
+    for d in chronic_condition:
+        col_name = f"{d}_count"
+        count_columns.append(col_name)
 
-    for col in all_columns:
-        if col in used_columns:
-            continue
-        filtered_columns.append(col)
-    
-    return filtered_columns
+    fls = []
+    for d in range(len(chronic_condition)):
+        col = get_value_from_universal_dict(dataset_name, chronic_condition[d])
+        ft = build_filter(col, "eq", 1)
+        ft = build_when(ft, col, 1, 0, alias=count_columns[d])
+        fls.append(ft)
+
+    lf = lf.with_columns(
+        fls,
+    ).with_columns(
+        TOTAL_COMORBIDITY = pl.sum_horizontal(count_columns)
+    )
+
+    return lf
+
+def build_disability_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    count_columns = []
+    for d in disability:
+        col_name = f"{d}_count"
+        count_columns.append(col_name)
+
+    fls = []
+    for d in range(len(disability)):
+        col = get_value_from_universal_dict(dataset_name, disability[d])
+        ft = build_filter(col, "eq", 1)
+        ft = build_when(ft, col, 1, 0, alias=count_columns[d])
+        fls.append(ft)
+
+    lf = lf.with_columns(
+        fls,
+    ).with_columns(
+        TOTAL_DISABILITY = pl.sum_horizontal(count_columns)
+    )
+
+    return lf
 
 def clean_dataset(dataset_name: int):
 
@@ -423,13 +471,13 @@ def clean_dataset(dataset_name: int):
         income_filter = build_income_filter(dataset_name)
         lf = lf.with_columns(income_filter)
     
+    lf = build_comorbidity_count_filter(lf, dataset_name)
+    lf = build_disability_count_filter(lf, dataset_name)
+    
     rename_filter = build_rename_filter(dataset_name)
 
     lf = lf.rename(rename_filter)
 
-    # drop_filter = build_drop_unused_columns_filter(lf.collect_schema().names(), list(rename_filter.values()))
-
-    # lf = lf.drop(drop_filter)
     lf = lf.select(list(rename_filter.values()))
 
     return lf

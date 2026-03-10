@@ -166,24 +166,31 @@ class MiniXGBoostClassifier:
         
         return total_shap_value, expected_value
     
-    def parallel_explain(self, X: np.ndarray, max_workers: int = 0) -> Tuple[np.ndarray, np.float32]:
-        expected_value = 0
-        total_shap_value = np.zeros_like(X)
+    def parallel_explain(self, X: np.ndarray, max_workers: int = 0, batch_size: int = 1000) -> Tuple[np.ndarray, np.float32]:
+        n_samples = X.shape[0]
+        expected_value = 0.0
+        total_shap_value = np.zeros_like(X, dtype=np.float32)
 
         if max_workers == 0:
-            max_workers = os.cpu_count() - 1
+            max_workers = max(1, os.cpu_count() - 1)
         
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-            futures = {
-                executor.submit(t.calculate_shap, X): t for t in self.trees
-            }
+        for i in range(0, n_samples, batch_size):
+            X_batch = X[i : i + batch_size]
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
+                futures = {
+                    executor.submit(t.calculate_shap, X_batch): t for t in self.trees
+                }
 
-            for future in concurrent.futures.as_completed(futures):
-                shap_val, exp_val = future.result()
-                total_shap_value += self.learning_rate * shap_val
-                expected_value += self.learning_rate * exp_val
+                for future in concurrent.futures.as_completed(futures):
+                    shap_val, exp_val = future.result()
+                    total_shap_value[i : i + batch_size] += self.learning_rate * shap_val
+                    
+                    if i == 0:
+                        expected_value += self.learning_rate * exp_val
+
+            print(f"batch {i}~{min(i + batch_size, n_samples)} done.")
         
         return total_shap_value, expected_value
         

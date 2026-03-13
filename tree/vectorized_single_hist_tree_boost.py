@@ -71,6 +71,9 @@ class VectorizedSingleHistTreeBoost:
 
         return categorical_sort_idx
 
+    def clean_up_tree(self):
+        self.grad = None
+        self.hess = None
 
     def _build_whole_histogram(self, binned_X, g, h, num_feature) -> Tuple[np.ndarray, np.ndarray]:
         n_bin = self.max_bin + 1
@@ -95,7 +98,7 @@ class VectorizedSingleHistTreeBoost:
         categorical_sort_idx = self._sort_categorical_features(hist_g, hist_h, num_feature)
 
         return hist_g, hist_h, categorical_sort_idx
-
+    
     def _find_best_split_feature_from_whole_histogram(self, hist_g, hist_h) -> Tuple[np.float32, np.int32]:
         node_g_total = hist_g.sum().reshape(-1, 1)
         node_h_total = hist_h.sum().reshape(-1, 1)
@@ -117,8 +120,11 @@ class VectorizedSingleHistTreeBoost:
         g_R_def_R = node_g_total - g_L_def_R
         h_R_def_R = node_h_total - h_L_def_R
 
-        score_l_R = (g_L_def_R ** 2) / (h_L_def_R + self.LAMBDA)
-        score_r_R = (g_R_def_R ** 2) / (h_R_def_R + self.LAMBDA)
+        score_l_R = np.square(g_L_def_R, dtype=np.float32)
+        score_l_R /= (h_L_def_R + self.LAMBDA)
+
+        score_r_R = np.square(g_R_def_R, dtype=np.float32)
+        score_r_R /= (h_R_def_R + self.LAMBDA)
 
         valid_mask_R = (h_L_def_R >= min_child_weight) & (h_R_def_R >= min_child_weight)
 
@@ -135,8 +141,11 @@ class VectorizedSingleHistTreeBoost:
         g_L_def_L = node_g_total - g_R_def_L
         h_L_def_L = node_h_total - h_R_def_L
 
-        score_l_L = (g_L_def_L ** 2) / (h_L_def_L + self.LAMBDA)
-        score_r_L = (g_R_def_L ** 2) / (h_R_def_L + self.LAMBDA)
+        score_l_L = np.square(g_L_def_L, dtype=np.float32)
+        score_l_L /= (h_L_def_L + self.LAMBDA)
+
+        score_r_L = np.square(g_R_def_L, dtype=np.float32)
+        score_r_L /= (h_R_def_L + self.LAMBDA)
 
         valid_mask_L = (h_L_def_L >= min_child_weight) & (h_R_def_L >= min_child_weight)
 
@@ -271,42 +280,43 @@ class VectorizedSingleHistTreeBoost:
 
             if best_gain > 0:
                 missing_go_left[node_id] = default_left
+                current_feature_data = X_binned[sample_indices, best_gain_feature]
+
                 if best_gain_feature in self.categorical_features:
                     node.is_categorical = True
                     is_categorical[node_id] = 1
                     mask = hist_h[best_gain_feature, :best_gain_bin_index+1] > 0
                     threshold = categorical_sort_idx[best_gain_feature, :best_gain_bin_index+1][mask]
-                    left_mask = np.isin(X_binned[sample_indices, best_gain_feature], threshold)
+                    left_mask = np.isin(current_feature_data, threshold)
                 else:
                     threshold = bin_edges[best_gain_bin_index + 1, best_gain_feature]
-                    left_mask = X_binned[sample_indices, best_gain_feature] <= best_gain_bin_index
+                    left_mask = current_feature_data <= best_gain_bin_index
                 
-                nan_mask = X_binned[sample_indices, best_gain_feature] == self.max_bin
+                nan_mask = current_feature_data == self.max_bin
+                valid_mask = ~nan_mask
                     
                 node.threshold = threshold
                 node.feature_index = best_gain_feature
                 features[node_id] = best_gain_feature
                 thresholds[node_id] = threshold
 
-                left_indices = sample_indices[(left_mask & ~nan_mask)]
-                right_indices = sample_indices[(~left_mask & ~nan_mask)]
-                missing_indices = sample_indices[nan_mask]
+                base_left_mask = left_mask & valid_mask 
+                base_right_mask = (~left_mask) & valid_mask
 
-                if self.verbose:
-                    print(f"left_indices={left_indices[:3]}...")
-                    print(f"right_indices={right_indices[:3]}...")
-                    print(f"missing_indices={missing_indices[:3]}...")
-                
-                if len(missing_indices) > 0:
-                    if default_left:
-                        left_indices = np.concatenate((left_indices, missing_indices), axis=0)
-                    else:
-                        right_indices = np.concatenate((right_indices, missing_indices), axis=0)
+                if default_left:
+                    final_left_mask = base_left_mask | nan_mask
+                    final_right_mask = base_right_mask
+                else:
+                    final_left_mask = base_left_mask
+                    final_right_mask = base_right_mask | nan_mask
                 
                 if self.verbose:
-                    print(f"Splitted on threshold={threshold}\nleft_indices={left_indices[:3]}...\nright_indices={right_indices[:3]}...")
+                    print(f"Splitted on threshold={threshold}\nleft_indices={final_left_mask[:3]}...\nright_indices={final_right_mask[:3]}...")
 
                 node.left, node.right = Node(), Node()
+
+                left_indices = sample_indices[final_left_mask]
+                right_indices = sample_indices[final_right_mask]
 
                 if np.any(left_mask) and np.any(~left_mask):
                     hist_g_left, hist_h_left, categorical_sort_idx_left, hist_g_right, hist_h_right, categorical_sort_idx_right = self._calculate_left_and_right_histogram(
@@ -349,6 +359,8 @@ class VectorizedSingleHistTreeBoost:
         self.is_leaf = np.array(is_leaf, dtype=np.bool)
         self.is_categorical = np.array(is_categorical, dtype=np.bool)
         self.missing_go_left = np.array(missing_go_left, dtype=np.bool)
+
+        self.clean_up_tree()
     
     def predict_train(
         self,

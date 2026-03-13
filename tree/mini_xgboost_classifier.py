@@ -99,7 +99,7 @@ class MiniXGBoostClassifier:
             case _:
                 return log_loss(label, y_pred)
 
-    def fit(self, X: np.ndarray, y: np.ndarray):
+    def fit(self, X: np.ndarray, y: np.ndarray, show_metrics=False):
         strong_pred = np.zeros(len(y))
         X_binned, bin_edges = self._quantize_features(X)
 
@@ -140,7 +140,7 @@ class MiniXGBoostClassifier:
             self.trees.append(tree)
             
             loss = self._get_loss_metrics(y, p)
-            if self.verbose:
+            if show_metrics:
                 print(f"Iteration: {i+1} | loss = {loss:.3f}")
 
     def predict_raw(self, X: np.ndarray) -> np.ndarray:

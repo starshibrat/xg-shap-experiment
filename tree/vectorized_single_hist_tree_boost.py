@@ -25,7 +25,6 @@ class VectorizedSingleHistTreeBoost:
         self.LAMBDA = LAMBDA
         self.GAMMA = GAMMA
         self.min_child_weight = min_child_weight
-        self.leaves = None
         self.verbose = verbose
 
         self.children_left = None
@@ -74,6 +73,7 @@ class VectorizedSingleHistTreeBoost:
     def clean_up_tree(self):
         self.grad = None
         self.hess = None
+        self.leaves = None
 
     def _build_whole_histogram(self, binned_X, g, h, num_feature) -> Tuple[np.ndarray, np.ndarray]:
         n_bin = self.max_bin + 1
@@ -360,8 +360,6 @@ class VectorizedSingleHistTreeBoost:
         self.is_categorical = np.array(is_categorical, dtype=np.bool)
         self.missing_go_left = np.array(missing_go_left, dtype=np.bool)
 
-        self.clean_up_tree()
-    
     def predict_train(
         self,
         n_samples: int

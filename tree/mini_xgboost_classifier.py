@@ -6,6 +6,7 @@ from sklearn.metrics import log_loss
 from common import common
 import concurrent.futures
 import os
+from tree.single_tree import SingleTree
 
 class MiniXGBoostClassifier:
     def __init__(self,
@@ -121,8 +122,8 @@ class MiniXGBoostClassifier:
                         categorical_features=self.categorical_features,
                         verbose=self.verbose,
                     )
-                case _:
-                    tree = VectorizedSingleHistTreeBoost(
+                case "single":
+                    tree = SingleTree(
                         max_depth=self.max_depth,
                         grad=grad,
                         hess=hess,
@@ -137,6 +138,7 @@ class MiniXGBoostClassifier:
             tree.fit(X_binned, bin_edges)
             new_pred = tree.predict_train(len(y))
             strong_pred += self.learning_rate * new_pred
+            tree.clean_up_tree()
             self.trees.append(tree)
             
             loss = self._get_loss_metrics(y, p)

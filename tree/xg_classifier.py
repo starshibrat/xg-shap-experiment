@@ -84,8 +84,6 @@ class XGClassifier:
         X_binned, column_max_val = self._quantize_features(X)
 
         for i in range(self.n_estimators):
-            p = common.sigmoid(strong_pred)
-
             grad, hess = self._get_grad_and_hess(y, strong_pred)
 
             tree = SingleTree(
@@ -98,22 +96,24 @@ class XGClassifier:
                 categorical_features=self.categorical_features,
                 verbose=self.verbose,
                 column_max_val=column_max_val,
+                learning_rate=self.learning_rate,
             )
+            
+            if show_metrics:
+                p = common.sigmoid(strong_pred)
+                loss = self._get_loss_metrics(y, p)
+                print(f"Iteration: {i+1} | loss = {loss:.3f}")
 
             tree.fit(X_binned)
             new_pred = tree.predict_train(len(y))
-            strong_pred += self.learning_rate * new_pred
+            strong_pred += new_pred
             tree.clean_up_tree()
             self.trees.append(tree)
-            
-            loss = self._get_loss_metrics(y, p)
-            if show_metrics:
-                print(f"Iteration: {i+1} | loss = {loss:.3f}")
 
     def predict_raw(self, X: np.ndarray) -> np.ndarray:
         pred = np.zeros(len(X))
         for t in self.trees:
-            pred += t.predict(X) * self.learning_rate
+            pred += t.predict(X)
         return pred
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:

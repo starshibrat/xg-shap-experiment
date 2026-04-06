@@ -16,6 +16,7 @@ class SingleTree:
                 categorical_features: list[int] = [],
                 verbose: bool = False,
                 column_max_val: np.ndarray = None,
+                learning_rate: np.float32 = 0.5,
         ):
         self.max_depth = max_depth
         self.grad = grad
@@ -27,6 +28,7 @@ class SingleTree:
         self.min_child_weight = min_child_weight
         self.verbose = verbose
         self.column_max_val = column_max_val
+        self.learning_rate = learning_rate
 
         self.children_left = None
         self.children_right = None
@@ -191,7 +193,7 @@ class SingleTree:
             missing_go_left.append(0)
 
             if depth == self.max_depth:
-                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA)
+                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
                 leaves.append(node_id)
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
@@ -260,13 +262,13 @@ class SingleTree:
 
                     stack.append((left_indices, depth + 1, node_id, True))
                 else:
-                    weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA)
+                    weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
                     leaves.append(node_id)
                     leaf_sample_indices.append(sample_indices)
                     is_leaf[node_id] = 1
                     values[node_id] = weight
             else:
-                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA)
+                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
                 leaves.append(node_id)
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
@@ -363,12 +365,22 @@ class SingleTree:
                     label = f"{feat_name} <= {self.thresholds[i]}"
 
                 dot.node(str(i), label, shape='ellipse', style='filled', fillcolor='lightblue')
+
+                default_left = self.missing_go_left[i]
                 
                 # Connect to children
                 if self.children_left[i] != -1:
-                    dot.edge(str(i), str(self.children_left[i]), label=" True")
+                    label = " True"
+                    if default_left:
+                        label += ", missing"
+
+                    dot.edge(str(i), str(self.children_left[i]), label=label)
                 if self.children_right[i] != -1:
-                    dot.edge(str(i), str(self.children_right[i]), label=" False")
+                    label = " False"
+                    if not default_left:
+                        label += ", missing"
+
+                    dot.edge(str(i), str(self.children_right[i]), label=label)
                     
         return dot
     

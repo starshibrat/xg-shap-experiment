@@ -152,10 +152,10 @@ class XGClassifier:
 
                 for future in concurrent.futures.as_completed(futures):
                     shap_val, exp_val = future.result()
-                    total_shap_value[i : i + batch_size] += self.learning_rate * shap_val
+                    total_shap_value[i : i + batch_size] += shap_val
                     
                     if i == 0:
-                        expected_value += self.learning_rate * exp_val
+                        expected_value += exp_val
 
             print(f"batch {i}~{min(i + batch_size, n_samples)} done.")
         

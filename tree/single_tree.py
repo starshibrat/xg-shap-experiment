@@ -186,7 +186,7 @@ class SingleTree:
             is_categorical.append(0)
             values.append(0)
             
-            weighted_n_node_samples.append(n_sample)
+            weighted_n_node_samples.append(0)
             n_node_samples.append(n_sample)
             features.append(-2)
             thresholds.append(-2.0)
@@ -198,6 +198,7 @@ class SingleTree:
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
                 values[node_id] = weight
+                weighted_n_node_samples[node_id] = np.sum(h[sample_indices])
                 continue
 
             best_gain = 0
@@ -267,12 +268,14 @@ class SingleTree:
                     leaf_sample_indices.append(sample_indices)
                     is_leaf[node_id] = 1
                     values[node_id] = weight
+                    weighted_n_node_samples[node_id] = np.sum(h[sample_indices])
             else:
                 weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
                 leaves.append(node_id)
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
                 values[node_id] = weight
+                weighted_n_node_samples[node_id] = np.sum(h[sample_indices])
         
         
         self.children_left = np.array(children_left, dtype=np.intp)
@@ -281,12 +284,36 @@ class SingleTree:
         self.thresholds = thresholds
         self.values = np.array(values, dtype=np.float32)
         self.n_node_samples = np.array(n_node_samples, dtype=np.uint32)
-        self.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.intp)
+        self.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.float64)
         self.is_leaf = np.array(is_leaf, dtype=np.bool)
         self.is_categorical = np.array(is_categorical, dtype=np.bool)
         self.missing_go_left = np.array(missing_go_left, dtype=np.bool)
         self.leaves = leaves
         self.leaf_sample_indices = leaf_sample_indices
+
+        self._backfill_weights_and_values(0)
+
+    def _backfill_weights_and_values(self, node_id: int):
+        if self.is_leaf[node_id]:
+            return self.weighted_n_node_samples[node_id], self.values[node_id]
+
+        left_child = self.children_left[node_id]
+        right_child = self.children_right[node_id]
+
+        left_cover, left_val = self._backfill_weights_and_values(left_child)
+        right_cover, right_val = self._backfill_weights_and_values(right_child)
+
+        parent_cover = left_cover + right_cover
+        self.weighted_n_node_samples[node_id] = parent_cover
+
+        if parent_cover > 0:
+            parent_val = (left_val * left_cover + right_val * right_cover) / parent_cover
+        else:
+            parent_val = 0.0
+
+        self.values[node_id] = parent_val
+        
+        return parent_cover, parent_val
 
     def predict_train(
         self,
@@ -363,6 +390,8 @@ class SingleTree:
                     label = f"{feat_name} ∈ {self.thresholds[i]}"
                 else:
                     label = f"{feat_name} <= {self.thresholds[i]}"
+                
+                label += f"\nCover = {self.weighted_n_node_samples[i]:.2f}"
 
                 dot.node(str(i), label, shape='ellipse', style='filled', fillcolor='lightblue')
 

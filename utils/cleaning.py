@@ -536,6 +536,17 @@ def build_employment_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame
 
     return lf.with_columns(ft)
 
+def recode_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    recode_variables = ["sex", "income", "arthritis", "highbp", "highchol", "drink", "insurance", "age", "race", "education", "bmi", "health", "physical", "mental", "smoker", "exercise", "veteran"]
+
+    fts = []
+
+    for v in recode_variables:
+        col = get_value_from_universal_dict(dataset_name, v)
+        ft = (pl.col(col) - 1).alias(col)
+        fts.append(ft)
+
+    return lf.with_columns(fts)
     
 def clean_dataset(dataset_name: int):
 
@@ -568,6 +579,7 @@ def clean_dataset(dataset_name: int):
     lf = build_cancer_diagnosa_filter(lf, dataset_name)
     lf = build_employment_filter(lf, dataset_name)
     lf = build_marital_filter(lf, dataset_name)
+    lf = recode_filter(lf, dataset_name)
     
     rename_filter = build_rename_filter(dataset_name)
 

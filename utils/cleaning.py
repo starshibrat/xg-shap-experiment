@@ -385,13 +385,13 @@ def build_cast_column_filter(dataset_name: int, columns: list[str], cast=pl.UInt
 
 def build_diabetes_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
     col = get_value_from_universal_dict(dataset_name, "diabetes")
-    a = build_filter(col, "notin", [1, 3, 4])
+    a = build_filter(col, "notin", [1, 2, 3, 4])
     b = build_filter(col, "isnull")
     ft = build_chain_filter([a, b], "|")
 
     lf = lf.remove(ft)
 
-    ft2 = build_filter(col, "eq", 1)
+    ft2 = build_filter(col, "in", [1, 2])
     ft2 = build_when(ft2, col, 1, 0)
 
     lf = lf.with_columns(ft2)
@@ -415,8 +415,8 @@ def build_rename_filter(dataset_name: int) -> dict:
     for k, v in mp_common.items():
         rename_mp[v] = k.upper()
     
-    rename_mp["TOTAL_COMORBIDITY"] = "TOTAL_COMORBIDITY"
-    rename_mp["TOTAL_DISABILITY"] = "TOTAL_DISABILITY"
+    rename_mp["COMORBIDITY_COUNT"] = "COMORBIDITY_COUNT"
+    rename_mp["DISABILITY_COUNT"] = "DISABILITY_COUNT"
 
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
@@ -439,7 +439,7 @@ def build_comorbidity_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.La
     lf = lf.with_columns(
         fls,
     ).with_columns(
-        TOTAL_COMORBIDITY = pl.sum_horizontal(count_columns)
+        COMORBIDITY_COUNT = pl.sum_horizontal(count_columns)
     )
 
     return lf
@@ -460,7 +460,7 @@ def build_disability_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.Laz
     lf = lf.with_columns(
         fls,
     ).with_columns(
-        TOTAL_DISABILITY = pl.sum_horizontal(count_columns)
+        DISABILITY_COUNT = pl.sum_horizontal(count_columns)
     )
 
     return lf

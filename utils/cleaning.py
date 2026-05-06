@@ -76,6 +76,9 @@ features = [
     "_RFDRHV9",
     "_TOTINDA",
     "_HCVU654",
+
+    # Additional
+    "VETERAN3",
 ]
 """
 
@@ -163,7 +166,8 @@ mp_common = {
     "stroke": "CVDSTRK3",
     "asthma": "_ASTHMS1",
     "smoker": "_SMOKER3",
-    "exercise": "_TOTINDA"
+    "exercise": "_TOTINDA",
+    "veteran": "VETERAN3",
 }
 
 mp_common_missing = {
@@ -196,6 +200,7 @@ mp_common_missing = {
     "highbp": [9],
     "drink": [9],
     "insurance": [9],
+    "veteran": [7, 9, None],
 }
 
 mp_2017_missing = {
@@ -212,8 +217,8 @@ mp_2021_missing = {
 
 mp_2019_missing = {
     "race": [9, None],
-    "sex": [],
     "highchol": [9, None],
+    "sex": [],
 }
 
 mp_2023_missing = {
@@ -227,8 +232,16 @@ disability = [
 ]
 
 chronic_condition = [
-    "heart", "stroke", "asthma", "arthritis", "skincancer", "otcancer",
+    "heart", "stroke", "asthma",
     "emphysema", "kidney", "depression", 
+]
+
+cancer_condition = [
+    "skincancer", "otcancer"
+]
+
+separate_chronic_condition = [
+    "arthritis"
 ]
 
 def get_map(dataset_name: int) -> dict:

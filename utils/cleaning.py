@@ -94,7 +94,7 @@ mp_2023 = {
     "kidney": "CHCKDNY2",
     "highbp": "_RFHYPE6",
     "highchol": "_RFCHOL3",
-    "drink": "_RFDRHV8",
+    "drink": "DRNKANY6",
     "insurance": "_HCVU653"
 }
 
@@ -110,7 +110,7 @@ mp_2021 = {
     "kidney": "CHCKDNY2",
     "highbp": "_RFHYPE6",
     "highchol": "_RFCHOL3",
-    "drink": "_RFDRHV7",
+    "drink": "DRNKANY5",
     "insurance": "_HCVU652"
 }
 
@@ -126,7 +126,7 @@ mp_2019 = {
     "kidney": "CHCKDNY2",
     "highbp": "_RFHYPE5",
     "highchol": "_RFCHOL2",
-    "drink": "_RFDRHV7",
+    "drink": "DRNKANY5",
     "insurance": "_HCVU651"
 }
 
@@ -142,13 +142,13 @@ mp_2017 = {
     "kidney": "CHCKIDNY",
     "highbp": "_RFHYPE5",
     "highchol": "_RFCHOL1",
-    "drink": "_RFDRHV5",
+    "drink": "DRNKANY5",
     "insurance": "_HCVU651"
 }
 
 mp_common = {
     "age": "_AGE_G",
-    "race": "_RACE",
+    "race": "RACEGR3",
     "marital": "MARITAL",
     "education": "_EDUCAG",
     "employment": "EMPLOY1",
@@ -164,7 +164,7 @@ mp_common = {
     "diffalon": "DIFFALON",
     "heart": "_MICHD",
     "stroke": "CVDSTRK3",
-    "asthma": "_ASTHMS1",
+    "asthma": "_CASTHM1",
     "smoker": "_SMOKER3",
     "exercise": "_TOTINDA",
     "veteran": "VETERAN3",
@@ -198,7 +198,7 @@ mp_common_missing = {
     "depression": [7, 9, None],
     "kidney": [7, 9, None],
     "highbp": [9],
-    "drink": [9],
+    "drink": [7, 9],
     "insurance": [9],
     "veteran": [7, 9, None],
 }
@@ -209,17 +209,18 @@ mp_2017_missing = {
     "sex": [9],
 }
 
+mp_2019_missing = {
+    "race": [9, None],
+    "highchol": [9, None],
+    "sex": [],
+}
+
 mp_2021_missing = {
     "race": [9],
     "highchol": [9, None],
     "sex": [],
 }
 
-mp_2019_missing = {
-    "race": [9, None],
-    "highchol": [9, None],
-    "sex": [],
-}
 
 mp_2023_missing = {
     "race": [9, None],

@@ -148,7 +148,7 @@ mp_2017 = {
 
 mp_common = {
     "age": "_AGE_G",
-    "race": "RACEGR3",
+    "race": "_RACEGR3",
     "marital": "MARITAL",
     "education": "_EDUCAG",
     "employment": "EMPLOY1",
@@ -515,6 +515,27 @@ def build_cancer_diagnosa_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.Lazy
     ft = pl.when(exist_cond).then(1).when(no_cond).then(0).otherwise(None).alias("CANCER_DIAGNOSIS")
 
     return lf.with_columns(ft)
+
+def build_marital_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    marital_col = get_value_from_universal_dict(dataset_name, "marital")
+
+    ft1 = build_filter(marital_col, op="eq", value=1)
+    ft2 = build_filter(marital_col, op="in", value=[2, 3, 4, 5, 6])
+
+    ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(marital_col).alias(marital_col)
+
+    return lf.with_columns(ft)
+
+def build_employment_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    employment_col = get_value_from_universal_dict(dataset_name, "employment")
+
+    ft1 = build_filter(employment_col, op="in", value=[1, 2])
+    ft2 = build_filter(employment_col, op="in", value=[3, 4, 5, 6, 7, 8])
+
+    ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(employment_col).alias(employment_col)
+
+    return lf.with_columns(ft)
+
     
 def clean_dataset(dataset_name: int):
 
@@ -545,6 +566,8 @@ def clean_dataset(dataset_name: int):
     lf = build_comorbidity_count_filter(lf, dataset_name)
     lf = build_disability_count_filter(lf, dataset_name)
     lf = build_cancer_diagnosa_filter(lf, dataset_name)
+    lf = build_employment_filter(lf, dataset_name)
+    lf = build_marital_filter(lf, dataset_name)
     
     rename_filter = build_rename_filter(dataset_name)
 

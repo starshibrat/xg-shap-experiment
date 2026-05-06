@@ -308,6 +308,8 @@ def build_filter(column_name: str, op: str, value=None):
             return col.is_null() | col.is_nan()
         case "isnotnull":
             return col.is_not_null() & col.is_not_nan()
+            
+
         
 def build_chain_filter(filters: list[pl.Expr], chain: str):
     assert chain == "|" or chain == "&"
@@ -356,7 +358,6 @@ def build_missing_dataset_filter(dataset_name: int, skip_columns: list[str]=[]) 
     mp = get_map(dataset_name)
     used_columns = list(mp.keys()) + list(mp_common.keys())
     ls_when = []
-
 
     for c in used_columns:
         
@@ -417,9 +418,11 @@ def build_rename_filter(dataset_name: int) -> dict:
     
     rename_mp["COMORBIDITY_COUNT"] = "COMORBIDITY_COUNT"
     rename_mp["DISABILITY_COUNT"] = "DISABILITY_COUNT"
+    rename_mp["CANCER_DIAGNOSIS"] = "CANCER_DIAGNOSIS"
 
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
+    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in cancer_condition}
 
     return rename_mp
 
@@ -442,7 +445,16 @@ def build_comorbidity_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.La
         COMORBIDITY_COUNT = pl.sum_horizontal(count_columns)
     )
 
-    return lf
+    cm_cnt_col = "COMORBIDITY_COUNT"
+
+    ct1_ft = build_filter(cm_cnt_col, "eq", 0)
+    ct2_ft = build_filter(cm_cnt_col, "in", [1, 2])
+
+    categorize_filter = pl.when(ct1_ft).then(0).when(ct2_ft).then(1).otherwise(2).alias(cm_cnt_col)
+
+    return lf.with_columns(
+        categorize_filter,
+    )
 
 def build_disability_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
     count_columns = []
@@ -463,8 +475,46 @@ def build_disability_count_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.Laz
         DISABILITY_COUNT = pl.sum_horizontal(count_columns)
     )
 
-    return lf
+    cm_cnt_col = "DISABILITY_COUNT"
 
+    ct1_ft = build_filter(cm_cnt_col, "eq", 0)
+    ct2_ft = build_filter(cm_cnt_col, "in", [1, 2])
+
+    categorize_filter = pl.when(ct1_ft).then(0).when(ct2_ft).then(1).otherwise(2).alias(cm_cnt_col)
+
+    return lf.with_columns(
+        categorize_filter,
+    )
+
+def build_cancer_diagnosa_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+    skincancer_var = get_value_from_universal_dict(dataset_name, "skincancer")
+    otcancer_var = get_value_from_universal_dict(dataset_name, "otcancer")
+
+
+    sk_ext = build_filter(skincancer_var, "eq", 1)
+    ot_ext = build_filter(otcancer_var, "eq", 1)
+
+    sk_no = build_filter(skincancer_var, "eq", 2)
+    ot_no = build_filter(otcancer_var, "eq", 2)
+
+    sk_null = build_filter(skincancer_var, "isnull")
+    ot_null = build_filter(otcancer_var, "isnull")
+
+    exist_cond1 = build_chain_filter([sk_ext, ot_ext], "&")
+    exist_cond2 = build_chain_filter([sk_ext, ot_no], "&")
+    exist_cond3 = build_chain_filter([sk_ext, ot_null], "&")
+
+    exist_cond4 = build_chain_filter([sk_no, ot_ext], "&")
+    exist_cond5 = build_chain_filter([sk_null, ot_ext], "&")
+
+    no_cond = build_chain_filter([sk_no, ot_no], "&")
+
+    exist_cond = build_chain_filter([exist_cond1, exist_cond2, exist_cond3, exist_cond3, exist_cond4, exist_cond5], "|")
+
+    ft = pl.when(exist_cond).then(1).when(no_cond).then(0).otherwise(None).alias("CANCER_DIAGNOSIS")
+
+    return lf.with_columns(ft)
+    
 def clean_dataset(dataset_name: int):
 
     brfss_dataset_path = "../datasets/BRFSS/"
@@ -475,8 +525,6 @@ def clean_dataset(dataset_name: int):
         missing_columns='insert'
     )
 
-    # diabetes_filter = build_diabetes_filter(dataset_name)
-    # lf = lf.remove(diabetes_filter)
     lf = build_diabetes_filter(lf, dataset_name)
 
     missing_filter = build_missing_dataset_filter(dataset_name, skip_columns=["age"])
@@ -495,6 +543,7 @@ def clean_dataset(dataset_name: int):
     
     lf = build_comorbidity_count_filter(lf, dataset_name)
     lf = build_disability_count_filter(lf, dataset_name)
+    lf = build_cancer_diagnosa_filter(lf, dataset_name)
     
     rename_filter = build_rename_filter(dataset_name)
 

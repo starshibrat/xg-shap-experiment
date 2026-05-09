@@ -15,8 +15,8 @@ class XGClassifier:
         max_depth: np.uint16 = 6,
         learning_rate: np.float32 = 0.5,
         ALPHA: np.float32 = 0.,
-        LAMBDA: np.float32 = 0.,
-        GAMMA: np.float32 = 0.,
+        reg_lambda: np.float32 = 0.,
+        min_split_loss: np.float32 = 0.,
         n_estimators: int = 100,
         custom_loss: Callable[[np.ndarray, np.ndarray], np.float32] = None,
         min_child_weight: float = 1.0,
@@ -29,8 +29,8 @@ class XGClassifier:
         self.max_depth = max_depth
         self.learning_rate = learning_rate
         self.ALPHA = ALPHA
-        self.LAMBDA = LAMBDA
-        self.GAMMA = GAMMA
+        self.reg_lambda = reg_lambda
+        self.min_split_loss = min_split_loss
         self.n_estimators = n_estimators
         self.trees = []
         self.max_bin = max_bin
@@ -52,6 +52,7 @@ class XGClassifier:
         return X_copy.astype(np.uint8), column_max_val
 
     def _get_grad_and_hess(self, label: np.ndarray, y_pred: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
         if isinstance(self.objective, str):
             match self.objective:
                 case "binary:logistic":
@@ -64,6 +65,12 @@ class XGClassifier:
                         positive_mask = (label == 1)
                         g[positive_mask] *= self.scale_pos_weight
                         h[positive_mask] *= self.scale_pos_weight
+
+                    if self.verbose:
+                        print(f"\ny_pred\n{y_pred}\n")
+                        print(f"\np\n{obj.p}\n")
+                        print(f"\nGradient\n{g}\n")
+                        print(f"\nHessian\n{h}\n")
 
                     return g, h
         else:
@@ -90,8 +97,8 @@ class XGClassifier:
                 max_depth=self.max_depth,
                 grad=grad,
                 hess=hess,
-                LAMBDA=self.LAMBDA,
-                GAMMA=self.GAMMA,
+                reg_lambda=self.reg_lambda,
+                min_split_loss=self.min_split_loss,
                 min_child_weight=self.min_child_weight,
                 categorical_features=self.categorical_features,
                 verbose=self.verbose,
@@ -112,12 +119,22 @@ class XGClassifier:
 
     def predict_raw(self, X: np.ndarray) -> np.ndarray:
         pred = np.zeros(len(X))
-        for t in self.trees:
+        if self.verbose:
+            print("\n===PREDICT INIT===")
+            print(f"\npred={pred}\n")
+        for i in range(len(self.trees)):
+            t = self.trees[i]
             pred += t.predict(X)
+            if self.verbose:
+                    print(f"\n{i + 1}th tree")
+                    print(f"\nres={pred}\n")
         return pred
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        return common.sigmoid(self.predict_raw(X))
+        res = common.sigmoid(self.predict_raw(X))
+        if self.verbose:
+            print(f"\nsigmoid'd pred raw={res}")
+        return res
     
     def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         return (self.predict_proba(X) >= threshold).astype(int)

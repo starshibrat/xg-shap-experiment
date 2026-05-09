@@ -10,8 +10,8 @@ class SingleTree:
                 max_depth: int,
                 grad: np.ndarray,
                 hess: np.ndarray,
-                LAMBDA: np.float32 = 1e-9,
-                GAMMA: np.float32 = 1e-9,
+                reg_lambda: np.float32 = 1e-9,
+                min_split_loss: np.float32 = 1e-9,
                 min_child_weight: float = 1.0,
                 categorical_features: list[int] = [],
                 verbose: bool = False,
@@ -23,8 +23,8 @@ class SingleTree:
         self.hess = hess
         self.leaves = None
         self.leaf_sample_indices = None
-        self.LAMBDA = LAMBDA
-        self.GAMMA = GAMMA
+        self.reg_lambda = reg_lambda
+        self.min_split_loss = min_split_loss
         self.min_child_weight = min_child_weight
         self.verbose = verbose
         self.column_max_val = column_max_val
@@ -42,6 +42,94 @@ class SingleTree:
         self.is_categorical = None
         self.missing_go_left = None
 
+    # def _find_best_categorical_split(
+    #     self,
+    #     category_data: np.array,
+    #     g: np.array,
+    #     h: np.array,
+    #     missing_val_code: np.uint8,
+    # ):
+    #     G_all = np.bincount(category_data, weights=g, minlength=missing_val_code + 1)
+    #     H_all = np.bincount(category_data, weights=h, minlength=missing_val_code + 1)
+
+    #     G_missing = G_all[missing_val_code]
+    #     H_missing = H_all[missing_val_code]
+
+    #     G_c = G_all[:missing_val_code]
+    #     H_c = H_all[:missing_val_code]
+
+    #     valid_mask = H_c > 0
+    #     valid_cats = np.where(valid_mask)[0]
+
+    #     if len(valid_cats) == 0 and H_missing == 0:
+    #         return 0.0, [], True
+        
+    #     G_valid = G_c[valid_mask]
+    #     H_valid = H_c[valid_mask]
+
+    #     stat = G_valid / (H_valid + self.reg_lambda)
+    #     sort_idx = np.argsort(stat)
+    #     sorted_cats = valid_cats[sort_idx]
+    #     G_sorted = G_valid[sort_idx]
+    #     H_sorted = H_valid[sort_idx]
+
+    #     G_L_base = np.concatenate(([0.0], np.cumsum(G_sorted)))
+    #     H_L_base = np.concatenate(([0.0], np.cumsum(H_sorted)))
+
+    #     G_total_obs = G_L_base[-1]
+    #     H_total_obs = H_L_base[-1]
+
+    #     G_R_base = G_total_obs - G_L_base
+    #     H_R_base = H_total_obs - H_L_base
+
+    #     G_L_DL = G_L_base + G_missing
+    #     H_L_DL = H_L_base + H_missing
+    #     G_R_DL = G_R_base
+    #     H_R_DL = H_R_base
+
+    #     G_L_DR = G_L_base
+    #     H_L_DR = H_L_base
+    #     G_R_DR = G_R_base + G_missing
+    #     H_R_DR = H_R_base + H_missing
+        
+    #     G_tot_all = G_total_obs + G_missing
+    #     H_tot_all = H_total_obs + H_missing
+
+    #     def calc_gain(G_L, H_L, G_R, H_R):
+    #         gain_L = (G_L**2) / (H_L + self.reg_lambda)
+    #         gain_R = (G_R**2) / (H_R + self.reg_lambda)
+    #         gain_root = (G_tot_all**2) / (H_tot_all + self.reg_lambda)
+    #         gain = 0.5 * (gain_L + gain_R - gain_root)
+            
+    #         # Mask out splits that result in an empty child node
+    #         invalid = (H_L == 0) | (H_R == 0)
+    #         gain[invalid] = -np.inf
+    #         return gain
+
+    #     gain_DL = calc_gain(G_L_DL, H_L_DL, G_R_DL, H_R_DL)
+    #     gain_DR = calc_gain(G_L_DR, H_L_DR, G_R_DR, H_R_DR)
+
+    #     best_idx_DL = np.argmax(gain_DL)
+    #     best_gain_DL = gain_DL[best_idx_DL]
+
+    #     best_idx_DR = np.argmax(gain_DR)
+    #     best_gain_DR = gain_DR[best_idx_DR]
+
+    #     if best_gain_DL == -np.inf and best_gain_DR == -np.inf:
+    #         return 0.0, [], True
+        
+    #     if best_gain_DL > best_gain_DR:
+    #         best_gain = best_gain_DL
+    #         default_left = True
+    #         best_idx = best_idx_DL
+    #     else:
+    #         best_gain = best_gain_DR
+    #         default_left = False
+    #         best_idx = best_idx_DR
+
+    #     left_categories = sorted_cats[:best_idx].tolist() 
+
+    #     return best_gain, left_categories, default_left
     def _find_best_categorical_split(
         self,
         category_data: np.array,
@@ -58,7 +146,7 @@ class SingleTree:
         G_c = G_all[:missing_val_code]
         H_c = H_all[:missing_val_code]
 
-        valid_mask = H_c > 0
+        valid_mask = H_c > 0.0
         valid_cats = np.where(valid_mask)[0]
 
         if len(valid_cats) == 0 and H_missing == 0:
@@ -67,7 +155,7 @@ class SingleTree:
         G_valid = G_c[valid_mask]
         H_valid = H_c[valid_mask]
 
-        stat = G_valid / (H_valid + self.LAMBDA)
+        stat = G_valid / (H_valid + self.reg_lambda)
         sort_idx = np.argsort(stat)
         sorted_cats = valid_cats[sort_idx]
         G_sorted = G_valid[sort_idx]
@@ -96,13 +184,13 @@ class SingleTree:
         H_tot_all = H_total_obs + H_missing
 
         def calc_gain(G_L, H_L, G_R, H_R):
-            gain_L = (G_L**2) / (H_L + self.LAMBDA)
-            gain_R = (G_R**2) / (H_R + self.LAMBDA)
-            gain_root = (G_tot_all**2) / (H_tot_all + self.LAMBDA)
+            gain_L = (G_L**2) / (H_L + self.reg_lambda)
+            gain_R = (G_R**2) / (H_R + self.reg_lambda)
+            gain_root = (G_tot_all**2) / (H_tot_all + self.reg_lambda)
             gain = 0.5 * (gain_L + gain_R - gain_root)
             
             # Mask out splits that result in an empty child node
-            invalid = (H_L == 0) | (H_R == 0)
+            invalid = (H_L  < self.min_child_weight) | (H_R == self.min_child_weight) | (gain <= self.min_split_loss)
             gain[invalid] = -np.inf
             return gain
 
@@ -130,14 +218,141 @@ class SingleTree:
         left_categories = sorted_cats[:best_idx].tolist() 
 
         return best_gain, left_categories, default_left
-
     
+    def _find_best_split(self,
+        category_data: np.array,
+        g: np.array,
+        h: np.array,
+        missing_val_code: np.uint8,
+    ):
+        G_bins = np.bincount(category_data, weights=g, minlength=missing_val_code + 1)
+        H_bins = np.bincount(category_data, weights=h, minlength=missing_val_code + 1)
+
+        if self.verbose:
+            print("\n===FIND BEST SPLIT INIT===\n")
+            print(f"g={g}\n")
+            print(f"h={h}\n")
+            print(f"categories = {np.arange(missing_val_code + 1)}\n")
+            bin_count = np.bincount(category_data, minlength=missing_val_code + 1)
+            print(f"bin_count={bin_count}\n")
+            print(f"G_bins={G_bins}\n")
+            print(f"H_bins={H_bins}\n")
+
+        G_missing = G_bins[missing_val_code]
+        H_missing = H_bins[missing_val_code]
+
+        G_bins = G_bins[:missing_val_code]
+        H_bins = H_bins[:missing_val_code]
+
+        G_total = np.sum(G_bins)
+        H_total = np.sum(H_bins)
+
+        category_score = G_bins / (H_bins + self.reg_lambda)
+
+        sorted_idx = np.argsort(category_score)
+        sorted_category = np.arange(missing_val_code)[sorted_idx]
+
+        sorted_G_bins = G_bins[sorted_idx]
+        sorted_H_bins = H_bins[sorted_idx]
+
+        if self.verbose:
+            print("====STATISTICS CALCULATION====")
+            print(f"\nmissing_val_code={missing_val_code}")
+            print(f"\nG_bins(non-missing)={G_bins}")
+            print(f"\nH_bins(non-missing)={H_bins}")
+            print(f"\nG_bins(missing)={G_missing}")
+            print(f"\nH_bins(missing)={H_missing}")
+            print(f"\nCategory score={category_score}")
+            print(f"\nsorted category\n{sorted_category}\n")
+            print("\n")
+
+        best_gain = -1
+        best_left_categories = None
+        best_default_left = False
+
+        def calc_gain(g_l, h_l, g_r, h_r, g_total, h_total):
+
+            if (
+                h_l < self.min_child_weight or
+                h_r < self.min_child_weight
+            ):
+                return -1
+
+            score_left = (g_l ** 2) / (h_l + self.reg_lambda)
+            score_right = (g_r ** 2) / (h_r + self.reg_lambda)
+            score_parent = (g_total ** 2) / (h_total + self.reg_lambda)
+
+            score = 0.5 * (score_left + score_right - score_parent) - self.min_split_loss
+
+            if self.verbose:
+                print(f"\n===CALCULATING SCORE OR GAIN===\n")
+                print(f"\ng_l={g_l}\nh_l={h_l}\ng_r={g_r}\nh_r={h_r}\ng_total={g_total}\nh_total={h_total}\n")
+                print(f"score_left={score_left}")
+                print(f"score_right={score_right}")
+                print(f"score_parent={score_parent}")
+
+            return score
+        
+        G_L, H_L = 0, 0
+
+        for j in range(len(sorted_category) - 1):
+            if self.verbose:
+                print(f"current categories={sorted_category[:j+1]}\n")
+
+            G_L += sorted_G_bins[j]
+            H_L += sorted_H_bins[j]
+
+            G_R = G_total - G_L
+            H_R = H_total - H_L
+
+            gain_default_left = calc_gain(
+                G_L + G_missing,
+                H_L + H_missing,
+                G_R,
+                H_R,
+                G_total + G_missing,
+                H_total + H_missing,
+            )
+
+            if gain_default_left > best_gain:
+                best_gain = gain_default_left
+                best_left_categories = sorted_category[:j + 1]
+                best_default_left = True
+
+            if self.verbose:
+                print(f"\ndefault left (G_L + G_missing)\nscore={gain_default_left}\n")
+            
+            gain_default_right = calc_gain(
+                G_L,
+                H_L,
+                G_R + G_missing,
+                H_R + H_missing,
+                G_total + G_missing,
+                H_total + H_missing
+            )
+
+            if gain_default_right > best_gain:
+                best_gain = gain_default_right
+                best_left_categories = sorted_category[:j + 1]
+                best_default_left = False
+            
+            if self.verbose:
+                print(f"\ndefault right (G_R + G_missing)\nscore={gain_default_right}\n")
+
+        if self.verbose:
+            print(f"\n===best value from current feature====\n")
+            print(f"best_gain={best_gain}")
+            print(f"best_left_categories={best_left_categories}")
+            print(f"best_default_left={best_default_left}")
+            print("\n")
+
+        return (best_gain, best_left_categories, best_default_left)
+                
     def clean_up_tree(self):
         self.grad = None
         self.hess = None
         self.leaves = None
         self.leaf_sample_indices = None
-
 
     def fit(self, X_binned: np.ndarray):
         g, h = self.grad, self.hess
@@ -193,7 +408,7 @@ class SingleTree:
             missing_go_left.append(0)
 
             if depth == self.max_depth:
-                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
+                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.reg_lambda) * self.learning_rate
                 leaves.append(node_id)
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
@@ -202,14 +417,21 @@ class SingleTree:
                 continue
 
             best_gain = 0
-            best_feature = 0
+            best_feature = None
             best_threshold = []
             best_default_left = False
 
             for feat in range(len(self.categorical_features)):
                 current_feature = self.categorical_features[feat]
 
-                current_best_gain, left_categories, default_left = self._find_best_categorical_split(
+                # current_best_gain, left_categories, default_left = self._find_best_categorical_split(
+                #     X_binned[sample_indices, current_feature],
+                #     g[sample_indices],
+                #     h[sample_indices],
+                #     self.column_max_val[current_feature],
+                # )
+
+                current_best_gain, left_categories, default_left = self._find_best_split(
                     X_binned[sample_indices, current_feature],
                     g[sample_indices],
                     h[sample_indices],
@@ -263,14 +485,14 @@ class SingleTree:
 
                     stack.append((left_indices, depth + 1, node_id, True))
                 else:
-                    weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
+                    weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.reg_lambda) * self.learning_rate
                     leaves.append(node_id)
                     leaf_sample_indices.append(sample_indices)
                     is_leaf[node_id] = 1
                     values[node_id] = weight
                     weighted_n_node_samples[node_id] = np.sum(h[sample_indices])
             else:
-                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.LAMBDA) * self.learning_rate
+                weight = -np.sum(g[sample_indices]) / (np.sum(h[sample_indices]) + self.reg_lambda) * self.learning_rate
                 leaves.append(node_id)
                 leaf_sample_indices.append(sample_indices)
                 is_leaf[node_id] = 1
@@ -321,8 +543,16 @@ class SingleTree:
     ) -> np.ndarray:
         y_pred = np.zeros(n_samples)
 
+        if self.verbose:
+            print("\n===PREDICT TRAIN===\n")
+
         for leaf in range(len(self.leaves)):
             y_pred[self.leaf_sample_indices[leaf]] = self.values[self.leaves[leaf]]
+
+            if self.verbose:
+                print(f"sample_indices={self.leaf_sample_indices[leaf]}")
+                print(f"values = {self.values[self.leaves[leaf]]}\n")
+
         
         return y_pred
 
@@ -391,7 +621,7 @@ class SingleTree:
                 else:
                     label = f"{feat_name} <= {self.thresholds[i]}"
                 
-                label += f"\nCover = {self.weighted_n_node_samples[i]:.2f}"
+                label += f"\nCover = {self.weighted_n_node_samples[i]:.4f}"
 
                 dot.node(str(i), label, shape='ellipse', style='filled', fillcolor='lightblue')
 

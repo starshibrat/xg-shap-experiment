@@ -385,7 +385,7 @@ class SingleTree:
             node_count += 1
 
             if self.verbose:
-                print(f"\nprocessing node_id={node_id}\nwith sample_indices: {sample_indices[:3]}...")
+                print(f"\nprocessing node_id={node_id}\nwith sample_indices: {sample_indices[:5]}...")
 
             if parent_id != -1:
                 if is_left:
@@ -470,12 +470,13 @@ class SingleTree:
                 else:
                     final_left_mask = base_left_mask
                     final_right_mask = base_right_mask | nan_mask
-                
-                if self.verbose:
-                    print(f"Splitted on threshold={best_threshold}\nleft_indices={final_left_mask[:3]}...\nright_indices={final_right_mask[:3]}...")
 
                 left_indices = sample_indices[final_left_mask]
                 right_indices = sample_indices[final_right_mask]
+
+                if self.verbose:
+                    print(f"Splitted on threshold={best_threshold}\nleft_indices={left_indices[:5]}...\nright_indices={right_indices[:5]}...")
+                    print(f"left_sample={left_indices.shape[0]}, right_sample={right_indices.shape[0]}")
 
                 if len(left_indices) > 0 and len(right_indices) > 0:
                     features[node_id] = best_feature

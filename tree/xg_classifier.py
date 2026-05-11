@@ -1,12 +1,12 @@
 from typing import Callable, Tuple
 import numpy as np
-from tree.vectorized_single_hist_tree_boost import VectorizedSingleHistTreeBoost
 from objective.logistic_classification import LogisticClassification
 from sklearn.metrics import log_loss
 from common import common
 import concurrent.futures
 import os
 from tree.single_tree import SingleTree
+import pandas as pd
 
 class XGClassifier:
     def __init__(self,
@@ -24,6 +24,7 @@ class XGClassifier:
         vectorized: bool = False,
         categorical_features: list[int]= [],
         scale_pos_weight=1.0,
+        base_score: str | float | int =None,
         
     ):
         self.max_depth = max_depth
@@ -41,6 +42,7 @@ class XGClassifier:
         self.vectorized = vectorized
         self.categorical_features = categorical_features
         self.scale_pos_weight = scale_pos_weight
+        self.base_score=base_score
 
     def _quantize_features(self, X: np.ndarray):
         nan_mask = np.isnan(X)
@@ -85,9 +87,32 @@ class XGClassifier:
                 return log_loss(label, y_pred)
             case _:
                 return log_loss(label, y_pred)
+            
+    def init_base_score(self, y: np.ndarray) -> np.ndaray:
+
+        N_pos = np.sum(y == 1)
+        N_neg = np.sum(y == 0)
+
+        sum_w_pos = N_pos * self.scale_pos_weight
+        sum_w_neg = N_neg * 1.0
+
+        p_init = sum_w_pos / (sum_w_pos + sum_w_neg)
+
+        if p_init == 0.0:
+            initial_score = -np.inf
+        elif p_init == 1.0:
+            initial_score = np.inf
+        else:
+            initial_score = common.logit(p_init)
+
+        return np.full(shape=y.shape, fill_value=initial_score, dtype=np.float32)
 
     def fit(self, X: np.ndarray, y: np.ndarray, show_metrics=False):
-        strong_pred = np.zeros(len(y))
+        if (isinstance(self.base_score, str) and self.base_score == "intercept") or not self.base_score:
+            strong_pred = self.init_base_score(y)
+        elif isinstance(self.base_score, int) or isinstance(self.base_score, float):
+            strong_pred = np.full_like(y, common.logit(self.base_score), dtype=np.float32)
+        
         X_binned, column_max_val = self._quantize_features(X)
 
         for i in range(self.n_estimators):

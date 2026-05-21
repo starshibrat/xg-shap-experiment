@@ -202,4 +202,3 @@ class XGClassifier:
             print(f"batch {i}~{min(i + batch_size, n_samples)} done.")
         
         return total_shap_value, expected_value
-        

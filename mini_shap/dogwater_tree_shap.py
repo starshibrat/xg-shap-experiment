@@ -152,7 +152,6 @@ class DogwaterTreeExplainer:
         if zero_fraction == 0:
             return
 
-
         self._vectorized_extend(unique_path, zero_fraction, one_fraction, feature_index)
 
         if self.is_leaf[node_index]:

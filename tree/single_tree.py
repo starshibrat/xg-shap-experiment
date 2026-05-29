@@ -15,6 +15,7 @@ class SingleTree:
                 verbose: bool = False,
                 column_max_val: np.ndarray = None,
                 learning_rate: np.float32 = 0.5,
+                vectorized: bool = False,
         ):
         self.max_depth = max_depth
         self.grad = grad
@@ -39,183 +40,7 @@ class SingleTree:
         self.categorical_features = categorical_features
         self.is_categorical = None
         self.missing_go_left = None
-
-    # def _find_best_categorical_split(
-    #     self,
-    #     category_data: np.array,
-    #     g: np.array,
-    #     h: np.array,
-    #     missing_val_code: np.uint8,
-    # ):
-    #     G_all = np.bincount(category_data, weights=g, minlength=missing_val_code + 1)
-    #     H_all = np.bincount(category_data, weights=h, minlength=missing_val_code + 1)
-
-    #     G_missing = G_all[missing_val_code]
-    #     H_missing = H_all[missing_val_code]
-
-    #     G_c = G_all[:missing_val_code]
-    #     H_c = H_all[:missing_val_code]
-
-    #     valid_mask = H_c > 0
-    #     valid_cats = np.where(valid_mask)[0]
-
-    #     if len(valid_cats) == 0 and H_missing == 0:
-    #         return 0.0, [], True
-        
-    #     G_valid = G_c[valid_mask]
-    #     H_valid = H_c[valid_mask]
-
-    #     stat = G_valid / (H_valid + self.reg_lambda)
-    #     sort_idx = np.argsort(stat)
-    #     sorted_cats = valid_cats[sort_idx]
-    #     G_sorted = G_valid[sort_idx]
-    #     H_sorted = H_valid[sort_idx]
-
-    #     G_L_base = np.concatenate(([0.0], np.cumsum(G_sorted)))
-    #     H_L_base = np.concatenate(([0.0], np.cumsum(H_sorted)))
-
-    #     G_total_obs = G_L_base[-1]
-    #     H_total_obs = H_L_base[-1]
-
-    #     G_R_base = G_total_obs - G_L_base
-    #     H_R_base = H_total_obs - H_L_base
-
-    #     G_L_DL = G_L_base + G_missing
-    #     H_L_DL = H_L_base + H_missing
-    #     G_R_DL = G_R_base
-    #     H_R_DL = H_R_base
-
-    #     G_L_DR = G_L_base
-    #     H_L_DR = H_L_base
-    #     G_R_DR = G_R_base + G_missing
-    #     H_R_DR = H_R_base + H_missing
-        
-    #     G_tot_all = G_total_obs + G_missing
-    #     H_tot_all = H_total_obs + H_missing
-
-    #     def calc_gain(G_L, H_L, G_R, H_R):
-    #         gain_L = (G_L**2) / (H_L + self.reg_lambda)
-    #         gain_R = (G_R**2) / (H_R + self.reg_lambda)
-    #         gain_root = (G_tot_all**2) / (H_tot_all + self.reg_lambda)
-    #         gain = 0.5 * (gain_L + gain_R - gain_root)
-            
-    #         # Mask out splits that result in an empty child node
-    #         invalid = (H_L == 0) | (H_R == 0)
-    #         gain[invalid] = -np.inf
-    #         return gain
-
-    #     gain_DL = calc_gain(G_L_DL, H_L_DL, G_R_DL, H_R_DL)
-    #     gain_DR = calc_gain(G_L_DR, H_L_DR, G_R_DR, H_R_DR)
-
-    #     best_idx_DL = np.argmax(gain_DL)
-    #     best_gain_DL = gain_DL[best_idx_DL]
-
-    #     best_idx_DR = np.argmax(gain_DR)
-    #     best_gain_DR = gain_DR[best_idx_DR]
-
-    #     if best_gain_DL == -np.inf and best_gain_DR == -np.inf:
-    #         return 0.0, [], True
-        
-    #     if best_gain_DL > best_gain_DR:
-    #         best_gain = best_gain_DL
-    #         default_left = True
-    #         best_idx = best_idx_DL
-    #     else:
-    #         best_gain = best_gain_DR
-    #         default_left = False
-    #         best_idx = best_idx_DR
-
-    #     left_categories = sorted_cats[:best_idx].tolist() 
-
-    #     return best_gain, left_categories, default_left
-    def _find_best_categorical_split(
-        self,
-        category_data: np.array,
-        g: np.array,
-        h: np.array,
-        missing_val_code: np.uint8,
-    ):
-        G_all = np.bincount(category_data, weights=g, minlength=missing_val_code + 1)
-        H_all = np.bincount(category_data, weights=h, minlength=missing_val_code + 1)
-
-        G_missing = G_all[missing_val_code]
-        H_missing = H_all[missing_val_code]
-
-        G_c = G_all[:missing_val_code]
-        H_c = H_all[:missing_val_code]
-
-        valid_mask = H_c > 0.0
-        valid_cats = np.where(valid_mask)[0]
-
-        if len(valid_cats) == 0 and H_missing == 0:
-            return 0.0, [], True
-        
-        G_valid = G_c[valid_mask]
-        H_valid = H_c[valid_mask]
-
-        stat = G_valid / (H_valid + self.reg_lambda)
-        sort_idx = np.argsort(stat)
-        sorted_cats = valid_cats[sort_idx]
-        G_sorted = G_valid[sort_idx]
-        H_sorted = H_valid[sort_idx]
-
-        G_L_base = np.concatenate(([0.0], np.cumsum(G_sorted)))
-        H_L_base = np.concatenate(([0.0], np.cumsum(H_sorted)))
-
-        G_total_obs = G_L_base[-1]
-        H_total_obs = H_L_base[-1]
-
-        G_R_base = G_total_obs - G_L_base
-        H_R_base = H_total_obs - H_L_base
-
-        G_L_DL = G_L_base + G_missing
-        H_L_DL = H_L_base + H_missing
-        G_R_DL = G_R_base
-        H_R_DL = H_R_base
-
-        G_L_DR = G_L_base
-        H_L_DR = H_L_base
-        G_R_DR = G_R_base + G_missing
-        H_R_DR = H_R_base + H_missing
-        
-        G_tot_all = G_total_obs + G_missing
-        H_tot_all = H_total_obs + H_missing
-
-        def calc_gain(G_L, H_L, G_R, H_R):
-            gain_L = (G_L**2) / (H_L + self.reg_lambda)
-            gain_R = (G_R**2) / (H_R + self.reg_lambda)
-            gain_root = (G_tot_all**2) / (H_tot_all + self.reg_lambda)
-            gain = 0.5 * (gain_L + gain_R - gain_root)
-            
-            # Mask out splits that result in an empty child node
-            invalid = (H_L  < self.min_child_weight) | (H_R == self.min_child_weight) | (gain <= self.min_split_loss)
-            gain[invalid] = -np.inf
-            return gain
-
-        gain_DL = calc_gain(G_L_DL, H_L_DL, G_R_DL, H_R_DL)
-        gain_DR = calc_gain(G_L_DR, H_L_DR, G_R_DR, H_R_DR)
-
-        best_idx_DL = np.argmax(gain_DL)
-        best_gain_DL = gain_DL[best_idx_DL]
-
-        best_idx_DR = np.argmax(gain_DR)
-        best_gain_DR = gain_DR[best_idx_DR]
-
-        if best_gain_DL == -np.inf and best_gain_DR == -np.inf:
-            return 0.0, [], True
-        
-        if best_gain_DL > best_gain_DR:
-            best_gain = best_gain_DL
-            default_left = True
-            best_idx = best_idx_DL
-        else:
-            best_gain = best_gain_DR
-            default_left = False
-            best_idx = best_idx_DR
-
-        left_categories = sorted_cats[:best_idx].tolist() 
-
-        return best_gain, left_categories, default_left
+        self.vectorized = vectorized
     
     def _find_best_split(self,
         category_data: np.array,
@@ -345,7 +170,7 @@ class SingleTree:
             print("\n")
 
         return (best_gain, best_left_categories, best_default_left)
-                
+
     def clean_up_tree(self):
         self.grad = None
         self.hess = None
@@ -421,13 +246,6 @@ class SingleTree:
 
             for feat in range(len(self.categorical_features)):
                 current_feature = self.categorical_features[feat]
-
-                # current_best_gain, left_categories, default_left = self._find_best_categorical_split(
-                #     X_binned[sample_indices, current_feature],
-                #     g[sample_indices],
-                #     h[sample_indices],
-                #     self.column_max_val[current_feature],
-                # )
 
                 current_best_gain, left_categories, default_left = self._find_best_split(
                     X_binned[sample_indices, current_feature],

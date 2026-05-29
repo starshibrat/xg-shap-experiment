@@ -63,42 +63,60 @@ class IndependentTreeExplainer:
 
         missing_default_left = self.missing_go_left[node_index]
 
-        missing_cond_x = np.isnan(x[split_idx])
-        missing_cond_c = np.isnan(c[split_idx])
-        cond_1 = x[split_idx] in threshold
-        cond_2 = c[split_idx] in threshold
+        cond_x_missing = np.isnan(x[split_idx])
+        cond_c_missing = np.isnan(c[split_idx])
+        cond_x_left = x[split_idx] in threshold
+        cond_c_left = c[split_idx] in threshold
+        cond_x_right = not(cond_x_left) and not(cond_x_missing)
+        cond_c_right = not(cond_c_left) and not(cond_c_missing)
 
         if self.verbose:
             print(f"node {node_index} = internal")
-            print(f"missing_cond_x = {missing_cond_x}")
-            print(f"missing_cond_c = {missing_cond_c}")
+            print(f"cond_x_missing = {cond_x_missing}")
+            print(f"cond_c_missing = {cond_c_missing}")
             print(f"missing -> go {"left" if missing_default_left else "right"}")
             print("### Note: in -> go left | not in and not missing -> go right")
-            print(f"cond_1 = {cond_1} | x[{split_idx}] is {"in" if cond_1 else "not in"} threshold")
-            print(f"cond_2 = {cond_2} | c[{split_idx}] is {"in" if cond_2 else "not in"} threshold")
+            print(f"cond_x_left = {cond_x_left} | x[{split_idx}] is {"in" if cond_x_left else "not in"} threshold")
+            print(f"cond_c_left = {cond_c_left} | c[{split_idx}] is {"in" if cond_c_left else "not in"} threshold")
 
         a = self.children_right[node_index]
         b = self.children_left[node_index]
 
-        if cond_1 and cond_2:
+        if cond_x_left and cond_c_left:
             k = b
-        if not(cond_1) and not(cond_2):
+        if cond_x_right and cond_c_right:
             k = a
         
-        if missing_cond_x and missing_cond_c:
+        if cond_x_missing and cond_c_left:
+            if missing_default_left:
+                k = b
+        
+        if cond_x_missing and cond_c_right:
+            if not missing_default_left:
+                k = a
+        
+        if cond_x_left and cond_c_missing:
+            if missing_default_left:
+                k = b
+        
+        if cond_x_right and cond_c_missing:
+            if not missing_default_left:
+                k = a
+        
+        if cond_x_missing and cond_c_missing:
             k = b if missing_default_left else a
         
         if xlist[split_idx] > 0:
-            if missing_cond_x:
+            if cond_x_missing:
                 k = b if missing_default_left else a
             else:
-                k = b if cond_1 else a
+                k = b if cond_x_left else a
         
         if clist[split_idx] > 0:
-            if missing_cond_c:
+            if cond_c_missing:
                 k = b if missing_default_left else a
             else:
-                k = b if cond_2 else a
+                k = b if cond_c_left else a
 
         if k is not None:
             if self.verbose:
@@ -107,8 +125,7 @@ class IndependentTreeExplainer:
 
             return self._recurse(k, U, V, xlist, clist, x, c, phi)
         
-        if cond_1 and (not(cond_2) and not(missing_cond_c)):
-            
+        if cond_x_left and cond_c_right:
             if self.verbose:
                 expr1 = f"x[split_idx]={x[split_idx]} in threshold={threshold}"
                 expr2 = f"c[split_idx]={c[split_idx]} in threshold={threshold}"
@@ -121,7 +138,7 @@ class IndependentTreeExplainer:
             clist[split_idx] += 1
             posc, negc = self._recurse(a, U, V + 1, xlist, clist, x, c, phi)
             clist[split_idx] -= 1
-        if (not(cond_1) and not(missing_cond_x)) and cond_2:
+        if cond_x_right and cond_c_left:
             if self.verbose:
                 expr1 = f"x[split_idx]={x[split_idx]} in threshold={threshold}"
                 expr2 = f"c[split_idx]={c[split_idx]} in threshold={threshold}"
@@ -134,7 +151,7 @@ class IndependentTreeExplainer:
             posc, negc = self._recurse(b, U, V + 1, xlist, clist, x, c, phi)
             clist[split_idx] -= 1
         
-        if missing_cond_x and cond_2:
+        if cond_x_missing and cond_c_left:
             if not missing_default_left:
                 if self.verbose:
                     expr2 = f"c[split_idx]={c[split_idx]} in threshold={threshold}"
@@ -148,7 +165,7 @@ class IndependentTreeExplainer:
                 posc, negc = self._recurse(b, U, V + 1, xlist, clist, x, c, phi)
                 clist[split_idx] -= 1
         
-        if cond_1 and missing_cond_c:
+        if cond_x_left and cond_c_missing:
             if not missing_default_left:
                 if self.verbose:
                     expr1 = f"x[split_idx]={x[split_idx]} in threshold={threshold}"
@@ -162,7 +179,7 @@ class IndependentTreeExplainer:
                 posc, negc = self._recurse(a, U, V + 1, xlist, clist, x, c, phi)
                 clist[split_idx] -= 1
 
-        if missing_cond_x and (not(cond_2) and not(missing_cond_c)):
+        if cond_x_missing and cond_c_right:
             if missing_default_left:
                 if self.verbose:
                     expr2 = f"c[split_idx]={c[split_idx]} in threshold={threshold}"
@@ -176,7 +193,7 @@ class IndependentTreeExplainer:
                 posc, negc = self._recurse(a, U, V + 1, xlist, clist, x, c, phi)
                 clist[split_idx] -= 1
         
-        if (not(cond_1) and not(missing_cond_x)) and missing_cond_c:
+        if cond_x_right and cond_c_missing:
             if missing_default_left:
                 if self.verbose:
                     expr2 = f"c[split_idx]={c[split_idx]} in threshold={threshold}"

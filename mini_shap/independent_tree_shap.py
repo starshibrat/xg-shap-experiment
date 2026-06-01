@@ -228,4 +228,102 @@ class IndependentTreeExplainer:
 
         
         return phi / self.refset.shape[0]
+    
+    def _half_vectorized_recurse(self, sample_indices: np.ndarray, node_index: int, U: int, V:int, xlist: list, clist: list, X: np.ndarray, c: np.ndarray, phi: np.ndarray) -> Tuple[np.float32, np.float32]:
+
+        n_samples = len(sample_indices)
+        if n_samples == 0:
+            return np.array([]), np.array([])
         
+        if self.is_leaf[node_index]:
+            pos, neg = 0.0, 0.0
+            if U != 0:
+                pos = self._calc_weight(V, U - 1) * self.values[node_index]
+            if U != V:
+                neg = -self._calc_weight(V, U) * self.values[node_index]
+            
+            return np.full(n_samples, pos, dtype=np.float32), np.full(n_samples, neg, dtype=np.float32)
+        
+        split_idx = self.features[node_index]
+        threshold = self.thresholds[node_index]
+        missing_default_left = self.missing_go_left[node_index]
+
+        cond_X_missing = np.isnan(X[sample_indices, split_idx])
+        cond_X_left = np.isin(X[sample_indices, split_idx], threshold)
+        cond_c_left = c[split_idx] in threshold
+        cond_c_missing = np.isnan(c[split_idx])
+
+        cond_X_right = ~cond_X_left & ~cond_X_missing
+        cond_c_right = not(cond_c_left) and not(cond_c_missing)
+
+        if missing_default_left:
+            left_indices = sample_indices[cond_X_missing | cond_X_left]
+            right_indices = sample_indices[cond_X_right]
+        else:
+            left_indices = sample_indices[cond_X_left]
+            right_indices = sample_indices[cond_X_missing | cond_X_right]
+
+        a = self.children_right[node_index]
+        b = self.children_left[node_index]
+
+        # cond_c_missing = np.isnan(c[split_idx])
+        # cond_c_left = c[split_idx] in threshold
+        # c_goes_left = cond_c_left or (cond_c_missing and missing_default_left)
+
+
+
+
+        if clist[split_idx] > 0:
+            print("clist[split_idx] > 0")
+            k = None
+            if cond_c_missing:
+                k = b if missing_default_left else a
+            else:
+                k = b if cond_c_left else a
+            
+            return self._half_vectorized_recurse(sample_indices, k, U, V, xlist, clist, X, c, phi)
+        
+        if xlist[split_idx] > 0:
+            print("xlist[split_idx] > 0")
+            self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
+            self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+
+            return 0, 0
+        
+        if cond_c_left or (cond_c_missing and missing_default_left):
+            self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
+
+            xlist[split_idx] += 1
+            posx, negx = self._half_vectorized_recurse(right_indices, a, U + 1, V + 1, xlist, clist, X, c, phi)
+            xlist[split_idx] -= 1
+
+            clist[split_idx] += 1
+            posc, negc = self._half_vectorized_recurse(right_indices, b, U, V + 1, xlist, clist, X, c, phi)
+            clist[split_idx] -= 1
+
+            phi[right_indices, split_idx] += posx + negc
+        
+        if cond_c_right or (cond_c_missing and not(missing_default_left)):
+            self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+
+            xlist[split_idx] += 1
+            posx, negx = self._half_vectorized_recurse(left_indices, b, U + 1, V + 1, xlist, clist, X, c, phi)
+            xlist[split_idx] -= 1
+
+            clist[split_idx] += 1
+            posc, negc = self._half_vectorized_recurse(left_indices, a, U, V + 1, xlist, clist, X, c, phi)
+            clist[split_idx] -= 1
+
+            phi[left_indices, split_idx] += posx + negc
+
+        return (posx + posc, negx + negc)
+    
+    def half_vectorized_explain(self, X: np.ndarray) -> np.ndarray:
+        phi = np.zeros_like(X, dtype=np.float32)
+        xlist = [0 for _ in range(self.refset.shape[1])]
+        clist = [0 for _ in range(self.refset.shape[1])]
+
+        for c in self.refset:
+            self._half_vectorized_recurse(np.arange(X.shape[0]), 0, 0, 0, xlist, clist, X, c, phi)
+        
+        return phi / self.refset.shape[0]

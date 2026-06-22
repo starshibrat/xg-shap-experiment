@@ -233,7 +233,7 @@ class IndependentTreeExplainer:
 
         n_samples = len(sample_indices)
         if n_samples == 0:
-            return np.array([]), np.array([])
+            return 0, 0
         
         if self.is_leaf[node_index]:
             pos, neg = 0.0, 0.0
@@ -242,81 +242,95 @@ class IndependentTreeExplainer:
             if U != V:
                 neg = -self._calc_weight(V, U) * self.values[node_index]
             
-            return np.full(n_samples, pos, dtype=np.float32), np.full(n_samples, neg, dtype=np.float32)
+            return pos, neg
         
         split_idx = self.features[node_index]
         threshold = self.thresholds[node_index]
         missing_default_left = self.missing_go_left[node_index]
 
-        cond_X_missing = np.isnan(X[sample_indices, split_idx])
-        cond_X_left = np.isin(X[sample_indices, split_idx], threshold)
         cond_c_left = c[split_idx] in threshold
         cond_c_missing = np.isnan(c[split_idx])
+        c_goes_left = cond_c_left or (cond_c_missing and missing_default_left)
 
-        cond_X_right = ~cond_X_left & ~cond_X_missing
-        cond_c_right = not(cond_c_left) and not(cond_c_missing)
+        x_vals = X[sample_indices, split_idx]
+
+        cond_X_missing = np.isnan(x_vals)
+        cond_X_left = np.isin(x_vals, threshold)
 
         if missing_default_left:
-            left_indices = sample_indices[cond_X_missing | cond_X_left]
-            right_indices = sample_indices[cond_X_right]
+            left_mask = cond_X_missing | cond_X_left
         else:
-            left_indices = sample_indices[cond_X_left]
-            right_indices = sample_indices[cond_X_missing | cond_X_right]
+            left_mask = cond_X_left & ~cond_X_missing
+        
+        right_mask = ~left_mask
+        left_indices = sample_indices[left_mask]
+        right_indices = sample_indices[right_mask]
 
         a = self.children_right[node_index]
         b = self.children_left[node_index]
 
-        # cond_c_missing = np.isnan(c[split_idx])
-        # cond_c_left = c[split_idx] in threshold
-        # c_goes_left = cond_c_left or (cond_c_missing and missing_default_left)
-
-
-
+        pos_out = np.zeros(n_samples, dtype=np.float32)
+        neg_out = np.zeros(n_samples, dtype=np.float32)
 
         if clist[split_idx] > 0:
-            print("clist[split_idx] > 0")
-            k = None
-            if cond_c_missing:
-                k = b if missing_default_left else a
-            else:
-                k = b if cond_c_left else a
-            
+            k = b if c_goes_left else a
             return self._half_vectorized_recurse(sample_indices, k, U, V, xlist, clist, X, c, phi)
         
         if xlist[split_idx] > 0:
-            print("xlist[split_idx] > 0")
-            self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
-            self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+            if np.any(left_mask):
+                p_left, n_left = self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
 
-            return 0, 0
+                pos_out[left_mask] = p_left
+                neg_out[left_mask] = n_left
+
+            if np.any(right_mask):
+                p_right, n_right =  self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+
+                pos_out[right_mask] = p_right
+                neg_out[right_mask] = n_right
+
+            return pos_out, neg_out
         
-        if cond_c_left or (cond_c_missing and missing_default_left):
-            self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
+        if c_goes_left:
+            if np.any(left_mask):
+                pos_l, neg_l = self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
+                pos_out[left_mask] = pos_l
+                neg_out[left_mask] = neg_l
 
-            xlist[split_idx] += 1
-            posx, negx = self._half_vectorized_recurse(right_indices, a, U + 1, V + 1, xlist, clist, X, c, phi)
-            xlist[split_idx] -= 1
+            if np.any(right_mask):
+                xlist[split_idx] += 1
+                posx, negx = self._half_vectorized_recurse(right_indices, a, U + 1, V + 1, xlist, clist, X, c, phi)
+                xlist[split_idx] -= 1
 
-            clist[split_idx] += 1
-            posc, negc = self._half_vectorized_recurse(right_indices, b, U, V + 1, xlist, clist, X, c, phi)
-            clist[split_idx] -= 1
+                clist[split_idx] += 1
+                posc, negc = self._half_vectorized_recurse(right_indices, b, U, V + 1, xlist, clist, X, c, phi)
+                clist[split_idx] -= 1
 
-            phi[right_indices, split_idx] += posx + negc
-        
-        if cond_c_right or (cond_c_missing and not(missing_default_left)):
-            self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+                phi[right_indices, split_idx] += posx + negc
 
-            xlist[split_idx] += 1
-            posx, negx = self._half_vectorized_recurse(left_indices, b, U + 1, V + 1, xlist, clist, X, c, phi)
-            xlist[split_idx] -= 1
+                pos_out[right_mask] = posx + posc
+                neg_out[right_mask] = negx + negc
+        else:
+            if np.any(right_mask):
+                pos_r, neg_r = self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+                pos_out[right_mask] = pos_r
+                neg_out[right_mask] = neg_r
+            
+            if np.any(left_mask):
+                xlist[split_idx] += 1
+                posx, negx = self._half_vectorized_recurse(left_indices, b, U + 1, V + 1, xlist, clist, X, c, phi)
+                xlist[split_idx] -= 1
 
-            clist[split_idx] += 1
-            posc, negc = self._half_vectorized_recurse(left_indices, a, U, V + 1, xlist, clist, X, c, phi)
-            clist[split_idx] -= 1
+                clist[split_idx] += 1
+                posc, negc = self._half_vectorized_recurse(left_indices, a, U, V + 1, xlist, clist, X, c, phi)
+                clist[split_idx] -= 1
 
-            phi[left_indices, split_idx] += posx + negc
+                phi[left_indices, split_idx] += posx + negc
 
-        return (posx + posc, negx + negc)
+                pos_out[right_mask] = posx + posc
+                neg_out[right_mask] = negx + negc
+
+        return pos_out, neg_out
     
     def half_vectorized_explain(self, X: np.ndarray) -> np.ndarray:
         phi = np.zeros_like(X, dtype=np.float32)

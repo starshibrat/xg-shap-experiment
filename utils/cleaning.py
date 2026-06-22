@@ -417,12 +417,12 @@ def build_rename_filter(dataset_name: int) -> dict:
     for k, v in mp_common.items():
         rename_mp[v] = k.upper()
     
-    rename_mp["COMORBIDITY_COUNT"] = "COMORBIDITY_COUNT"
-    rename_mp["DISABILITY_COUNT"] = "DISABILITY_COUNT"
+    # rename_mp["COMORBIDITY_COUNT"] = "COMORBIDITY_COUNT"
+    # rename_mp["DISABILITY_COUNT"] = "DISABILITY_COUNT"
     rename_mp["CANCER_DIAGNOSIS"] = "CANCER_DIAGNOSIS"
 
-    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
-    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
+    # rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
+    # rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in cancer_condition}
 
     return rename_mp
@@ -537,7 +537,11 @@ def build_employment_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame
     return lf.with_columns(ft)
 
 def recode_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
-    recode_variables = ["sex", "income", "arthritis", "highbp", "highchol", "drink", "insurance", "age", "race", "education", "bmi", "health", "physical", "mental", "smoker", "exercise", "veteran"]
+    recode_variables = ["sex", "income", "arthritis", "highbp", "highchol", "drink", "insurance", "age", "race", "education", "bmi", "health", "physical", "mental", "smoker", "exercise", "veteran", 
+    "heart", "stroke", "asthma",
+    "emphysema", "kidney", "depression", 
+    "deaf", "blind", "concentration", "diffwalk", "diffdres", "diffalon"
+    ]
 
     fts = []
 
@@ -574,8 +578,8 @@ def clean_dataset(dataset_name: int):
         income_filter = build_income_filter(dataset_name)
         lf = lf.with_columns(income_filter)
     
-    lf = build_comorbidity_count_filter(lf, dataset_name)
-    lf = build_disability_count_filter(lf, dataset_name)
+    # lf = build_comorbidity_count_filter(lf, dataset_name)
+    # lf = build_disability_count_filter(lf, dataset_name)
     lf = build_cancer_diagnosa_filter(lf, dataset_name)
     lf = build_employment_filter(lf, dataset_name)
     lf = build_marital_filter(lf, dataset_name)

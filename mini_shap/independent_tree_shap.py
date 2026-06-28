@@ -269,12 +269,12 @@ class IndependentTreeExplainer:
         a = self.children_right[node_index]
         b = self.children_left[node_index]
 
-        pos_out = np.zeros(n_samples, dtype=np.float32)
-        neg_out = np.zeros(n_samples, dtype=np.float32)
-
         if clist[split_idx] > 0:
             k = b if c_goes_left else a
             return self._half_vectorized_recurse(sample_indices, k, U, V, xlist, clist, X, c, phi)
+        
+        pos_out = np.zeros(len(sample_indices), dtype=np.float32)
+        neg_out = np.zeros(len(sample_indices), dtype=np.float32)
         
         if xlist[split_idx] > 0:
             if np.any(left_mask):
@@ -292,12 +292,13 @@ class IndependentTreeExplainer:
             return pos_out, neg_out
         
         if c_goes_left:
-            if np.any(left_mask):
+            if np.any(left_indices):
                 pos_l, neg_l = self._half_vectorized_recurse(left_indices, b, U, V, xlist, clist, X, c, phi)
+
                 pos_out[left_mask] = pos_l
                 neg_out[left_mask] = neg_l
 
-            if np.any(right_mask):
+            if np.any(right_indices):
                 xlist[split_idx] += 1
                 posx, negx = self._half_vectorized_recurse(right_indices, a, U + 1, V + 1, xlist, clist, X, c, phi)
                 xlist[split_idx] -= 1
@@ -311,12 +312,13 @@ class IndependentTreeExplainer:
                 pos_out[right_mask] = posx + posc
                 neg_out[right_mask] = negx + negc
         else:
-            if np.any(right_mask):
+            if np.any(right_indices):
                 pos_r, neg_r = self._half_vectorized_recurse(right_indices, a, U, V, xlist, clist, X, c, phi)
+
                 pos_out[right_mask] = pos_r
                 neg_out[right_mask] = neg_r
             
-            if np.any(left_mask):
+            if np.any(left_indices):
                 xlist[split_idx] += 1
                 posx, negx = self._half_vectorized_recurse(left_indices, b, U + 1, V + 1, xlist, clist, X, c, phi)
                 xlist[split_idx] -= 1
@@ -327,8 +329,8 @@ class IndependentTreeExplainer:
 
                 phi[left_indices, split_idx] += posx + negc
 
-                pos_out[right_mask] = posx + posc
-                neg_out[right_mask] = negx + negc
+                pos_out[left_mask] = posx + posc
+                neg_out[left_mask] = negx + negc
 
         return pos_out, neg_out
     

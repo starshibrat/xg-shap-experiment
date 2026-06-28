@@ -37,7 +37,6 @@ class TestTreeSHAP(unittest.TestCase):
 
         return (max_depth, learning_rate, n_estimators, gamma, lb, base_score)
 
-    @unittest.skip
     def test_local_accuracy_single(self):
         X_train_np, X_test_np, y_train_np, y_test_np, scale_pos_weight = self.load_data_and_scale_pos_weight(50000)
 
@@ -80,10 +79,10 @@ class TestTreeSHAP(unittest.TestCase):
 
     # @unittest.skip
     def test_local_accuracy_half_vectorized(self):
-        rows = 10000
+        rows = 1000
         X_train_np, X_test_np, y_train_np, y_test_np, scale_pos_weight = self.load_data_and_scale_pos_weight(rows)
 
-        max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=2)
+        max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=3, n_estimators=5)
 
         dt2 = XGClassifier(
             max_depth=max_depth,
@@ -101,8 +100,7 @@ class TestTreeSHAP(unittest.TestCase):
 
         rng = np.random.default_rng()
 
-        foreground_index = rng.choice(1000, 500, False)
-        foreground_sample = X_test_np[foreground_index]
+        foreground_sample = X_test_np
 
         base_val = dt2.predict_raw(X_train_np).mean()
         shap_sum = np.full(shape=len(foreground_sample), dtype=np.float32, fill_value=base_val)
@@ -118,7 +116,7 @@ class TestTreeSHAP(unittest.TestCase):
         
         print(f"Time taken = {time_diff}")
 
-        raw_score = dt2.predict_raw(X_test_np)[foreground_index]
+        raw_score = dt2.predict_raw(X_test_np)
 
         print(shap_sum[:40])
         print("====")

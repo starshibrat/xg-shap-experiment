@@ -105,7 +105,7 @@ class SingleTree:
             score_right = (g_r ** 2) / (h_r + self.reg_lambda)
             score_parent = (g_total ** 2) / (h_total + self.reg_lambda)
 
-            score = 0.5 * (score_left + score_right - score_parent) - self.min_split_loss
+            score = (score_left + score_right - score_parent) - self.min_split_loss
 
             if self.verbose:
                 print(f"\n===CALCULATING SCORE OR GAIN===\n")
@@ -245,6 +245,9 @@ class SingleTree:
             best_default_left = False
 
             for feat in range(len(self.categorical_features)):
+                if self.verbose:
+                    print(f"\nFinding best split from feature {feat}...\n")
+
                 current_feature = self.categorical_features[feat]
 
                 current_best_gain, left_categories, default_left = self._find_best_split(

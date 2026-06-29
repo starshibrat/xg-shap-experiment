@@ -343,3 +343,148 @@ class IndependentTreeExplainer:
             self._half_vectorized_recurse(np.arange(X.shape[0]), 0, 0, 0, xlist, clist, X, c, phi)
         
         return phi / self.refset.shape[0]
+    
+    def _full_vectorized_recurse(self, x_indices: np.ndarray, c_indices: np.ndarray, node_index: int, U: int, V:int, xlist: list, clist: list, X: np.ndarray, C: np.ndarray, phi: np.ndarray) -> Tuple[np.float32, np.float32]:
+
+        x_samples = len(x_indices)
+        c_samples = len(c_indices)
+
+        if x_samples == 0 or c_samples == 0:
+            return 0, 0
+        
+        if self.is_leaf[node_index]:
+            pos, neg = 0.0, 0.0
+            if U != 0:
+                pos = self._calc_weight(V, U - 1) * self.values[node_index]
+            if U != V:
+                neg = -self._calc_weight(V, U) * self.values[node_index]
+            
+            return pos * c_samples , neg * c_samples
+        
+        split_idx = self.features[node_index]
+        threshold = self.thresholds[node_index]
+        missing_default_left = self.missing_go_left[node_index]
+
+        x_vals = X[x_indices, split_idx]
+        c_vals = C[c_indices, split_idx]
+
+        cond_C_left = np.isin(c_vals, threshold)
+        cond_C_missing = np.isnan(c_vals)
+        
+        cond_X_left = np.isin(x_vals, threshold)
+        cond_X_missing = np.isnan(x_vals)
+        
+
+        if missing_default_left:
+            x_left_mask = cond_X_missing | cond_X_left
+            c_left_mask = cond_C_missing | cond_C_left
+        else:
+            x_left_mask = cond_X_left & ~cond_X_missing
+            c_left_mask = cond_C_left & ~cond_C_missing
+
+        x_right_mask = ~x_left_mask
+        c_right_mask = ~c_left_mask
+
+        x_left_indices = x_indices[x_left_mask]
+        x_right_indices = x_indices[x_right_mask]
+        c_left_indices = c_indices[c_left_mask]
+        c_right_indices = c_indices[c_right_mask]
+        
+        a = self.children_right[node_index]
+        b = self.children_left[node_index]
+
+        pos_out = np.zeros(len(x_indices), dtype=np.float32)
+        neg_out = np.zeros(len(x_indices), dtype=np.float32)
+
+        if clist[split_idx] > 0:
+
+            if np.any(c_left_mask):
+                p, n = self._full_vectorized_recurse(x_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
+
+                pos_out += p
+                neg_out += n
+            
+            if np.any(c_right_mask):
+                p, n = self._full_vectorized_recurse(x_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+
+                pos_out += p
+                neg_out += n
+            
+            return pos_out, neg_out
+        
+        if xlist[split_idx] > 0:
+
+            if np.any(x_left_mask):
+                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
+                p_r, n_r = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U, V, xlist, clist, X, C, phi)
+
+                pos_out[x_left_mask] += p_l + p_r
+                neg_out[x_left_mask] += n_l + n_r
+
+            
+            if np.any(x_right_mask):
+                p_l, n_l = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U, V, xlist, clist, X, C, phi)
+                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+
+                pos_out[x_right_mask] += p_r + p_l
+                neg_out[x_right_mask] += n_r + n_l
+
+
+            return pos_out, neg_out
+        
+        if np.any(c_left_indices):
+            if np.any(x_left_indices):
+                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
+
+                pos_out[x_left_mask] += p_l
+                neg_out[x_left_mask] += n_l
+            
+            if np.any(x_right_indices):
+                xlist[split_idx] += 1
+                posx, negx = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U + 1, V + 1, xlist, clist, X, C, phi)
+                xlist[split_idx] -= 1
+
+                clist[split_idx] += 1
+                posc, negc = self._full_vectorized_recurse(x_right_indices, c_left_indices, b, U, V + 1, xlist, clist, X, C, phi)
+                clist[split_idx] -= 1
+
+                
+                phi[x_right_indices, split_idx] += posx + negc
+                pos_out[x_right_mask] += posx + posc
+                neg_out[x_right_mask] += negx + negc
+        
+        if np.any(c_right_indices):
+            if np.any(x_right_indices):
+                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+
+                pos_out[x_right_mask] += p_r
+                neg_out[x_right_mask] += n_r
+            
+            if np.any(x_left_indices):
+                xlist[split_idx] += 1
+                posx, negx = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U + 1, V + 1, xlist, clist, X, C, phi)
+                xlist[split_idx] -= 1
+
+                clist[split_idx] += 1
+                posc, negc = self._full_vectorized_recurse(x_left_indices, c_right_indices, a, U, V + 1, xlist, clist, X, C, phi)
+                clist[split_idx] -= 1
+
+
+                phi[x_left_indices, split_idx] += posx + negc
+
+                pos_out[x_left_mask] += posx + posc
+                neg_out[x_left_mask] += negx + negc
+        
+
+        return pos_out, neg_out
+    
+    def full_vectorized_explain(self, X: np.ndarray) -> np.ndarray:
+        phi = np.zeros_like(X, dtype=np.float32)
+        xlist = [0 for _ in range(self.refset.shape[1])]
+        clist = [0 for _ in range(self.refset.shape[1])]
+
+        self._full_vectorized_recurse(np.arange(X.shape[0]), np.arange(self.refset.shape[0]), 0, 0, 0, xlist, clist, X, self.refset, phi)
+        
+        return phi / self.refset.shape[0]
+    
+    

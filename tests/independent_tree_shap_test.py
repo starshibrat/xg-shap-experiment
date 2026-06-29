@@ -38,7 +38,7 @@ class TestTreeSHAP(unittest.TestCase):
         return (max_depth, learning_rate, n_estimators, gamma, lb, base_score)
 
     def test_local_accuracy_single(self):
-        X_train_np, X_test_np, y_train_np, y_test_np, scale_pos_weight = self.load_data_and_scale_pos_weight(50000)
+        X_train_np, X_test_np, y_train_np, _, scale_pos_weight = self.load_data_and_scale_pos_weight(50000)
 
         max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=2)
 
@@ -77,12 +77,12 @@ class TestTreeSHAP(unittest.TestCase):
 
         self.assertTrue(np.isclose(shap_sum, raw_score, rtol=1e-2))
 
-    # @unittest.skip
+    @unittest.skip
     def test_local_accuracy_half_vectorized(self):
         rows = 1000
-        X_train_np, X_test_np, y_train_np, y_test_np, scale_pos_weight = self.load_data_and_scale_pos_weight(rows)
+        X_train_np, X_test_np, y_train_np, _, scale_pos_weight = self.load_data_and_scale_pos_weight(rows)
 
-        max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=3, n_estimators=5)
+        max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=5, n_estimators=3)
 
         dt2 = XGClassifier(
             max_depth=max_depth,
@@ -97,8 +97,6 @@ class TestTreeSHAP(unittest.TestCase):
         )
 
         dt2.fit(X_train_np, y_train_np)
-
-        rng = np.random.default_rng()
 
         foreground_sample = X_test_np
 
@@ -123,6 +121,60 @@ class TestTreeSHAP(unittest.TestCase):
         print(raw_score[:40])
 
         for t in np.isclose(shap_sum, raw_score, rtol=1e-2):
+            self.assertEqual(t, np.True_)
+
+    # @unittest.skip
+    def test_local_accuracy_full_vectorized(self):
+        rows = 100000
+        X_train_np, X_test_np, y_train_np, _, scale_pos_weight = self.load_data_and_scale_pos_weight(rows)
+
+        max_depth, learning_rate, n_estimators, gamma, lb, base_score = self.load_parameter(max_depth=8, n_estimators=5)
+
+        dt2 = XGClassifier(
+            max_depth=max_depth,
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            scale_pos_weight=scale_pos_weight,
+            reg_lambda=lb,
+            min_child_weight=gamma,
+            categorical_features=[i for i in range(X_train_np.shape[1])],
+            base_score=base_score,
+            verbose=False
+        )
+
+        dt2.fit(X_train_np, y_train_np)
+
+        foreground_sample = X_test_np
+        background_sample = X_train_np
+
+        base_val = dt2.predict_raw(background_sample).mean()
+        shap_sum = np.full(shape=len(foreground_sample), dtype=np.float32, fill_value=base_val)
+
+        start_time = datetime.now()
+
+        for i in range(n_estimators):
+            tree_exp = IndependentTreeExplainer(model=dt2.trees[i], refset=background_sample, verbose=False)
+            tree_exp_shap_val = tree_exp.full_vectorized_explain(foreground_sample)
+            shap_sum += tree_exp_shap_val.sum(axis=1)
+
+        time_diff = datetime.now() - start_time
+        
+        print(f"Time taken = {time_diff}")
+
+        raw_score = dt2.predict_raw(X_test_np)
+
+        print(shap_sum[:40])
+        print("====")
+        print(raw_score[:40])
+
+        index = 0
+
+        for t in np.isclose(shap_sum, raw_score, rtol=1e-2):
+            if not t:
+                print(f"FAIL TEST: {shap_sum[index]} != {raw_score[index]}")
+            
+            index += 1
+
             self.assertEqual(t, np.True_)
 
 if __name__ == '__main__':

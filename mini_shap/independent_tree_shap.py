@@ -432,14 +432,14 @@ class IndependentTreeExplainer:
 
             return pos_out, neg_out
         
-        if np.any(c_left_indices):
-            if np.any(x_left_indices):
+        if len(c_left_indices) > 0:
+            if len(x_left_indices) > 0:
                 p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
 
                 pos_out[x_left_mask] += p_l
                 neg_out[x_left_mask] += n_l
             
-            if np.any(x_right_indices):
+            if len(x_right_indices) > 0:
                 xlist[split_idx] += 1
                 posx, negx = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U + 1, V + 1, xlist, clist, X, C, phi)
                 xlist[split_idx] -= 1
@@ -447,20 +447,19 @@ class IndependentTreeExplainer:
                 clist[split_idx] += 1
                 posc, negc = self._full_vectorized_recurse(x_right_indices, c_left_indices, b, U, V + 1, xlist, clist, X, C, phi)
                 clist[split_idx] -= 1
-
                 
                 phi[x_right_indices, split_idx] += posx + negc
                 pos_out[x_right_mask] += posx + posc
                 neg_out[x_right_mask] += negx + negc
         
-        if np.any(c_right_indices):
-            if np.any(x_right_indices):
+        if len(c_right_indices) > 0:
+            if len(x_right_indices) > 0:
                 p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
 
                 pos_out[x_right_mask] += p_r
                 neg_out[x_right_mask] += n_r
             
-            if np.any(x_left_indices):
+            if len(x_left_indices) > 0:
                 xlist[split_idx] += 1
                 posx, negx = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U + 1, V + 1, xlist, clist, X, C, phi)
                 xlist[split_idx] -= 1
@@ -468,7 +467,6 @@ class IndependentTreeExplainer:
                 clist[split_idx] += 1
                 posc, negc = self._full_vectorized_recurse(x_left_indices, c_right_indices, a, U, V + 1, xlist, clist, X, C, phi)
                 clist[split_idx] -= 1
-
 
                 phi[x_left_indices, split_idx] += posx + negc
 

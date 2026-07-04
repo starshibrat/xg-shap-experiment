@@ -11,8 +11,6 @@ class IndependentTreeExplainer:
         self.features = model.features
         self.thresholds = model.thresholds
         self.values = model.values
-        self.n_node_samples = model.n_node_samples
-        self.weighted_n_node_samples = model.weighted_n_node_samples
         self.children_left = model.children_left
         self.children_right = model.children_right
         self.is_leaf = model.is_leaf

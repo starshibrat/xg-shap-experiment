@@ -2,6 +2,8 @@ import numpy as np
 from mini_shap.dogwater_tree_shap import DogwaterTreeExplainer
 from collections import deque
 import graphviz
+import xgboost as xgb
+import pandas as pd
 
 class SingleTree:
     def __init__(self, 
@@ -41,6 +43,100 @@ class SingleTree:
         self.is_categorical = None
         self.missing_go_left = None
         self.vectorized = vectorized
+
+
+    @classmethod
+    def load_from_booster(cls, booster: xgb.Booster, columns: list[str]) -> SingleTree:
+        dframe = booster.trees_to_dataframe()
+        dframe.set_index("ID", inplace=True)
+
+        features = []
+        thresholds = []
+        values = []
+        children_left = []
+        children_right = []
+        is_leaf = []
+        missing_go_left = []
+        weighted_n_node_samples = []
+
+        # stack consists of
+        # (index, parent_id, is_left)
+
+        stack = [
+            ("0-0", -1, False)
+        ]
+        node_count = 0
+
+        while stack:
+            index, parent_id, is_left = stack.pop()
+            node_id = node_count
+            node_count += 1
+
+            if parent_id != -1:
+                if is_left:
+                    children_left[parent_id] = node_id
+                else:
+                    children_right[parent_id] = node_id
+
+            children_left.append(-1)
+            children_right.append(-1)
+            is_leaf.append(0)
+            values.append(0)
+            features.append(-2)
+            thresholds.append(-2)
+            missing_go_left.append(False)
+            
+
+            cur_row = dframe.loc[index]
+            feature = cur_row["Feature"]
+            threshold = cur_row["Category"]
+            nan_to_left = cur_row["Missing"] == cur_row["No"]
+            cover = cur_row["Cover"]
+
+            weighted_n_node_samples.append(cover)
+
+            if feature == "Leaf":
+                is_leaf[node_id] = 1
+                values[node_id] = cur_row["Gain"]
+                continue
+            
+            missing_go_left[node_id] = nan_to_left
+            features[node_id] = feature
+            thresholds[node_id] = threshold
+            
+
+            right_index = cur_row["Yes"]
+            left_index = cur_row["No"]
+
+            if not pd.isna(right_index):
+                stack.append((right_index, node_id, False))
+            
+            if not pd.isna(left_index):
+                stack.append((left_index, node_id, True))
+        
+        for t in thresholds:
+            if isinstance(t, list):
+                for i in range(len(t)):
+                    t[i] = int(t[i])
+
+        for i in range(len(features)):
+            feature_name = features[i]
+
+            if isinstance(feature_name, str):
+                features[i] = columns.index(feature_name)
+
+        tree = SingleTree(max_depth=0, grad=[], hess=[])
+
+        tree.children_left = np.array(children_left, dtype=np.intp)
+        tree.children_right = np.array(children_right, dtype=np.intp)
+        tree.features = np.array(features, dtype=np.intp)
+        tree.thresholds = thresholds
+        tree.values = np.array(values, dtype=np.float32)
+        tree.is_leaf = np.array(is_leaf, dtype=np.bool)
+        tree.missing_go_left = np.array(missing_go_left, dtype=np.bool)
+        tree.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.float64)
+
+        return tree
     
     def _find_best_split(self,
         category_data: np.array,

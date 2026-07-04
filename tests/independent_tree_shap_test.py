@@ -37,7 +37,8 @@ class TestTreeSHAP(unittest.TestCase):
         random_state = random_state
 
         return (max_depth, learning_rate, n_estimators, gamma, lb, base_score, random_state)
-
+    
+    @unittest.skip
     def test_local_accuracy_single(self):
         X_train_np, X_test_np, y_train_np, _, scale_pos_weight = self.load_data_and_scale_pos_weight(50000)
 

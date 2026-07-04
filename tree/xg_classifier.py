@@ -6,7 +6,7 @@ from common import common
 import concurrent.futures
 import os
 from tree.single_tree import SingleTree
-import pandas as pd
+import xgboost as xgb
 
 class XGClassifier:
     def __init__(self,
@@ -24,7 +24,7 @@ class XGClassifier:
         vectorized: bool = False,
         categorical_features: list[int]= [],
         scale_pos_weight=1.0,
-        base_score: str | float | int =None,
+        base_score: str | float | int = None,
         
     ):
         self.max_depth = max_depth
@@ -42,7 +42,21 @@ class XGClassifier:
         self.vectorized = vectorized
         self.categorical_features = categorical_features
         self.scale_pos_weight = scale_pos_weight
-        self.base_score=base_score
+        self.base_score = base_score
+
+    @classmethod
+    def load_from_xgbclassifier(cls, model: xgb.XGBClassifier, columns: list[str]) -> XGClassifier:
+        booster = model.get_booster()
+        trees = []
+
+        for i in range(booster.num_boosted_rounds()):
+            st = SingleTree.load_from_booster(booster[i], columns)
+            trees.append(st)
+        
+        m = XGClassifier()
+        m.trees = trees
+
+        return m
 
     def _quantize_features(self, X: np.ndarray):
         nan_mask = np.isnan(X)

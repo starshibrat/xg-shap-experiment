@@ -58,6 +58,7 @@ class SingleTree:
         is_leaf = []
         missing_go_left = []
         weighted_n_node_samples = []
+        is_categorical = []
 
         # stack consists of
         # (index, parent_id, is_left)
@@ -85,7 +86,7 @@ class SingleTree:
             features.append(-2)
             thresholds.append(-2)
             missing_go_left.append(False)
-            
+            is_categorical.append(0)
 
             cur_row = dframe.loc[index]
             feature = cur_row["Feature"]
@@ -103,6 +104,7 @@ class SingleTree:
             missing_go_left[node_id] = nan_to_left
             features[node_id] = feature
             thresholds[node_id] = threshold
+            is_categorical[node_id] = 1
             
 
             right_index = cur_row["Yes"]
@@ -135,6 +137,7 @@ class SingleTree:
         tree.is_leaf = np.array(is_leaf, dtype=np.bool)
         tree.missing_go_left = np.array(missing_go_left, dtype=np.bool)
         tree.weighted_n_node_samples = np.array(weighted_n_node_samples, dtype=np.float64)
+        tree.is_categorical = np.array(is_categorical, dtype=np.bool)
 
         return tree
     
@@ -186,7 +189,7 @@ class SingleTree:
             print("\n")
 
         best_gain = -1
-        best_left_categories = None
+        best_right_categories = None
         best_default_left = False
 
         def calc_gain(g_l, h_l, g_r, h_r, g_total, h_total):
@@ -216,8 +219,8 @@ class SingleTree:
 
         for j in range(len(sorted_category) - 1):
             if self.verbose:
-                print(f"current categories={sorted_category[:j+1]}\n")
-
+                print(f"current categories={sorted_category[j + 1:]}\n")
+                
             G_L += sorted_G_bins[j]
             H_L += sorted_H_bins[j]
 
@@ -235,7 +238,7 @@ class SingleTree:
 
             if gain_default_left > best_gain:
                 best_gain = gain_default_left
-                best_left_categories = sorted_category[:j + 1]
+                best_right_categories = sorted_category[j + 1:]
                 best_default_left = True
 
             if self.verbose:
@@ -252,7 +255,7 @@ class SingleTree:
 
             if gain_default_right > best_gain:
                 best_gain = gain_default_right
-                best_left_categories = sorted_category[:j + 1]
+                best_right_categories = sorted_category[j + 1:]
                 best_default_left = False
             
             if self.verbose:
@@ -261,11 +264,11 @@ class SingleTree:
         if self.verbose:
             print(f"\n===best value from current feature====\n")
             print(f"best_gain={best_gain}")
-            print(f"best_left_categories={best_left_categories}")
+            print(f"best_right_categories={best_right_categories}")
             print(f"best_default_left={best_default_left}")
             print("\n")
 
-        return (best_gain, best_left_categories, best_default_left)
+        return (best_gain, best_right_categories, best_default_left)
 
     def clean_up_tree(self):
         self.grad = None
@@ -346,7 +349,7 @@ class SingleTree:
 
                 current_feature = self.categorical_features[feat]
 
-                current_best_gain, left_categories, default_left = self._find_best_split(
+                current_best_gain, right_categories, default_left = self._find_best_split(
                     X_binned[sample_indices, current_feature],
                     g[sample_indices],
                     h[sample_indices],
@@ -356,7 +359,7 @@ class SingleTree:
                 if current_best_gain > best_gain:
                     best_gain = current_best_gain
                     best_feature = current_feature
-                    best_threshold = left_categories
+                    best_threshold = right_categories
                     best_default_left = default_left
                 
 
@@ -371,13 +374,13 @@ class SingleTree:
 
                 if best_feature in self.categorical_features:
                     is_categorical[node_id] = 1
-                    left_mask = np.isin(current_feature_data, best_threshold)
+                    right_mask = np.isin(current_feature_data, best_threshold)
                 
                 nan_mask = current_feature_data == self.column_max_val[best_feature]
                 valid_mask = ~nan_mask
                     
-                base_left_mask = left_mask & valid_mask 
-                base_right_mask = (~left_mask) & valid_mask
+                base_right_mask = right_mask & valid_mask 
+                base_left_mask = (~right_mask) & valid_mask
 
                 if best_default_left:
                     final_left_mask = base_left_mask | nan_mask
@@ -488,14 +491,14 @@ class SingleTree:
             nan_mask = np.isnan(X[sample_indices, feature])
 
             if self.is_categorical[node_index]:
-                left_mask = np.isin(X[sample_indices, feature], threshold)
+                right_mask = np.isin(X[sample_indices, feature], threshold)
             else:
-                left_mask = X[sample_indices, feature] <= threshold
+                right_mask = X[sample_indices, feature] <= threshold
             
             missing_indices = sample_indices[nan_mask]
 
-            left_indices = sample_indices[left_mask & ~nan_mask]
-            right_indices = sample_indices[~left_mask & ~nan_mask]
+            right_indices = sample_indices[right_mask & ~nan_mask]
+            left_indices = sample_indices[~right_mask & ~nan_mask]
 
             if self.missing_go_left[node_index]:
                 left_indices = np.concatenate((left_indices, missing_indices), axis=0)
@@ -506,7 +509,6 @@ class SingleTree:
             queue.append((self.children_right[node_index], right_indices))
         
         return res
-
     
     def calculate_shap(self, X):
         explainer = DogwaterTreeExplainer(model=self)
@@ -532,7 +534,8 @@ class SingleTree:
                 else:
                     feat_name = f"Feature {self.features[i]}"
                 
-                if self.features[i] in self.categorical_features:
+                # if self.features[i] in self.categorical_features:
+                if self.is_categorical[i]:
                     label = f"{feat_name} ∈ {self.thresholds[i]}"
                 else:
                     label = f"{feat_name} <= {self.thresholds[i]}"
@@ -545,13 +548,13 @@ class SingleTree:
                 
                 # Connect to children
                 if self.children_left[i] != -1:
-                    label = " True"
+                    label = " False"
                     if default_left:
                         label += ", missing"
 
                     dot.edge(str(i), str(self.children_left[i]), label=label)
                 if self.children_right[i] != -1:
-                    label = " False"
+                    label = " True"
                     if not default_left:
                         label += ", missing"
 

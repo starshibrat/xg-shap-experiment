@@ -366,10 +366,10 @@ class IndependentTreeExplainer:
         x_vals = X[x_indices, split_idx]
         c_vals = C[c_indices, split_idx]
 
-        cond_C_left = np.isin(c_vals, threshold)
+        cond_C_left = ~np.isin(c_vals, threshold)
         cond_C_missing = np.isnan(c_vals)
         
-        cond_X_left = np.isin(x_vals, threshold)
+        cond_X_left = ~np.isin(x_vals, threshold)
         cond_X_missing = np.isnan(x_vals)
         
 

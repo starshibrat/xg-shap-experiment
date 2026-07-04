@@ -44,7 +44,6 @@ def cast_to_string_categorical_data(df: pd.DataFrame):
 
         df[col] = df[col].astype(dtype="Int8").astype("str")
 
-
 def load_dummy_xgb_parameter():
     base_score =  0.5
     objective =  "binary:logistic"
@@ -59,11 +58,14 @@ def load_dummy_xgb_parameter():
 
     return base_score, objective, random_state, max_depth, n_estimators, eta, enable_categorical, max_cat_to_one_hot, reg_lambda, min_child_weight
 
-def load_dummy_lib_classifier(scale_pos_weight: np.float32=1, md: int=None) -> xgb.XGBClassifier:
+def load_dummy_lib_classifier(scale_pos_weight: np.float32=1, md: int=None, ntree: int=None) -> xgb.XGBClassifier:
     base_score, objective, random_state, max_depth, n_estimators, eta, enable_categorical, max_cat_to_one_hot, reg_lambda, min_child_weight = load_dummy_xgb_parameter()
 
     if md is not None:
         max_depth = md
+    
+    if ntree is not None:
+        n_estimators = ntree
 
     m = xgb.XGBClassifier(
         base_score=base_score,

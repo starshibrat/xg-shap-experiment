@@ -4,31 +4,57 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import xgboost as xgb
 from tree.xg_classifier import XGClassifier
+from typing import Tuple
 
+def load_brfss(
+    dataset_version: str = None
+):
+    if dataset_version is None:
+        dataset_version = "v3"
+
+    current_dir = Path(__file__).parent
+    file_path = current_dir / f"../datasets/BRFSS/out_{dataset_version}.parquet"
+    df = pd.read_parquet(file_path.resolve())
+
+    return df
+
+def calculate_scale_pos_weight(
+    y: Tuple[pd.Series, np.ndarray]
+):
+    pos_class, neg_class = 0, 0
+
+    if isinstance(y, pd.Series):
+        classes = y.value_counts()
+        pos_class = classes[1]
+        neg_class = classes[0]
+    elif isinstance(y, np.ndarray):
+        classes = np.bincount(y)
+        pos_class = classes[1]
+        neg_class = classes[0]
+
+    return neg_class / pos_class
 
 def load_data_and_scale_pos_weight(
-        size: int = 10000, 
+        size: int = None,
         return_numpy: bool=False,
         cast_string=False,
         tsize: np.float32=0.2,
         rdstate: int=1,
 ):
-        current_dir = Path(__file__).parent
-        file_path = current_dir / "../datasets/BRFSS/out_v3.parquet"
-        df = pd.read_parquet(file_path.resolve())
+        df = load_brfss()
 
         if cast_string:
             cast_to_string_categorical_data(df)
 
-        limit = size
+        if size is None:
+            size = len(df)
 
-        y = df.iloc[:limit, 0]
-        X = df.iloc[:limit, 1:].astype("category")
+        y = df.iloc[:size, 0]
+        X = df.iloc[:size, 1:].astype("category")
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=rdstate, test_size=tsize, stratify=y)
 
-        classes = y_train.value_counts()
-        scale_pos_weight = classes[0]/classes[1]
+        scale_pos_weight = calculate_scale_pos_weight(y_train)
 
         if not return_numpy:
             return X_train, X_test, y_train, y_test, scale_pos_weight

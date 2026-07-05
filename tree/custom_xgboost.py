@@ -14,6 +14,7 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
         min_child_weight=0,
         objective='binary:logistic',
         base_score=0.5,
+        min_split_loss=0,
         verbose=0,
     ):
         self.max_depth = max_depth
@@ -26,6 +27,7 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
         self.min_child_weight=min_child_weight
         self.objective=objective
         self.base_score=base_score
+        self.min_split_loss = min_split_loss
         self.verbose=verbose
         
 
@@ -56,6 +58,7 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
             min_child_weight=self.min_child_weight,
             objective=self.objective,
             base_score=self.base_score,
+            min_split_loss=self.min_split_loss
         )
 
         self.model.fit(X, y, **fit_params)

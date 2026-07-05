@@ -178,17 +178,6 @@ class XGClassifier:
     def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         return (self.predict_proba(X) >= threshold).astype(int)
 
-    def explain(self, X: np.ndarray) -> Tuple[np.ndarray, np.float32]:
-        expected_value = 0
-        total_shap_value = np.zeros_like(X)
-
-        for t in self.trees:
-            shap_val, exp_val = t.calculate_shap(X)
-            total_shap_value += self.learning_rate * shap_val
-            expected_value += self.learning_rate * exp_val
-        
-        return total_shap_value, expected_value
-    
     def parallel_explain(self, X: np.ndarray, max_workers: int = 0, batch_size: int = 1000) -> Tuple[np.ndarray, np.float32]:
         n_samples = X.shape[0]
         expected_value = 0.0
@@ -216,3 +205,12 @@ class XGClassifier:
             print(f"batch {i}~{min(i + batch_size, n_samples)} done.")
         
         return total_shap_value, expected_value
+    
+    def calculate_interventional_shap(self, foreground_sample: np.ndarray, background_sample: np.ndarray) -> Tuple[np.float64, np.ndarray]:
+        base_value = self.predict_raw(background_sample).mean()
+        shap_value = np.zeros_like(foreground_sample)
+
+        for t in self.trees:
+            shap_value += t.calculate_interventional_shap(foreground_sample, background_sample)
+        
+        return base_value, shap_value

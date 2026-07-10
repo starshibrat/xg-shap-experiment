@@ -4,32 +4,25 @@ from xgboost import XGBClassifier
 
 class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
     def __init__(self, 
-        max_depth=3, 
-        learning_rate=0.1, 
-        n_estimators=100,
-        enable_categorical=True,
-        random_state=1,
-        reg_lambda=1e-9,
-        max_cat_to_onehot=1,
-        min_child_weight=0,
-        objective='binary:logistic',
-        base_score=0.5,
-        min_split_loss=0,
-        verbose=0,
+        max_depth: int=3, 
+        learning_rate: float=0.1, 
+        n_estimators: int=100,
+        enable_categorical: bool=True,
+        random_state: int=1,
+        max_cat_to_onehot: int=1,
+        objective: str='binary:logistic',
+        base_score: float=0.5,
+        verbose: int=0,
     ):
         self.max_depth = max_depth
         self.learning_rate = learning_rate
         self.n_estimators = n_estimators
         self.enable_categorical = enable_categorical
-        self.random_state=random_state
-        self.reg_lambda=reg_lambda
-        self.max_cat_to_onehot=max_cat_to_onehot
-        self.min_child_weight=min_child_weight
-        self.objective=objective
-        self.base_score=base_score
-        self.min_split_loss = min_split_loss
-        self.verbose=verbose
-        
+        self.random_state = random_state
+        self.max_cat_to_onehot = max_cat_to_onehot
+        self.objective = objective
+        self.base_score = base_score
+        self.verbose = verbose
 
     def fit(self, X, y, **fit_params):
         # Dynamically calculate the weight based ONLY on the current fold's training y
@@ -46,22 +39,22 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
             print(y)
             print("==="*10)
         
-        self.model = XGBClassifier(
-            max_depth=self.max_depth,
-            learning_rate=self.learning_rate,
-            n_estimators=self.n_estimators,
-            scale_pos_weight=_dynamic_weight,
-            enable_categorical=self.enable_categorical,
-            random_state=self.random_state,
-            reg_lambda=self.reg_lambda,
-            max_cat_to_onehot=self.max_cat_to_onehot,
-            min_child_weight=self.min_child_weight,
-            objective=self.objective,
-            base_score=self.base_score,
-            min_split_loss=self.min_split_loss
+        model = XGBClassifier(
+            max_depth = self.max_depth,
+            learning_rate = self.learning_rate,
+            n_estimators = self.n_estimators,
+            scale_pos_weight = _dynamic_weight,
+            enable_categorical = self.enable_categorical,
+            random_state = self.random_state,
+            max_cat_to_onehot = self.max_cat_to_onehot,
+            objective = self.objective,
+            base_score = self.base_score,
         )
 
-        self.model.fit(X, y, **fit_params)
+        model.fit(X, y, **fit_params)
+
+        self.model = model
+
         return self
         
     def predict(self, X):

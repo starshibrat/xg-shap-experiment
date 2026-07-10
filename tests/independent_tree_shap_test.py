@@ -231,10 +231,15 @@ class TestTreeSHAP(unittest.TestCase):
             itshap = expl.full_vectorized_explain(x_sample_np)
 
             kshap = expl_kern.shap_values(x_sample, nsamples=2000)
+
+            print(kshap)
+            print("===")
+            print(itshap)
+
             assert np.allclose(itshap, kshap), "Kernel SHAP doesn't match Independent Tree SHAP!"
             assert np.allclose(itshap.sum() + expl.expected_value, ypred[x_ind]), "SHAP values don't sum to model output!"
 
-    def test_several_tree_compare_with_kernel_shap(self):
+    def test_several_trees_compare_with_kernel_shap(self):
         """Compare with Kernel SHAP, which makes the same independence assumptions
         as Independent Tree SHAP.  Namely, they both assume independence between the
         set being conditioned on, and the remainder set.
@@ -292,6 +297,11 @@ class TestTreeSHAP(unittest.TestCase):
             itshap = expl.full_vectorized_explain(x_sample_np)
 
             kshap = expl_kern.shap_values(x_sample, nsamples=2000)
+
+            print(kshap)
+            print("===")
+            print(itshap)
+
             assert np.allclose(itshap, kshap), "Kernel SHAP doesn't match Independent Tree SHAP!"
             assert np.allclose(itshap.sum() + expl.expected_value, ypred[x_ind]), "SHAP values don't sum to model output!"
 

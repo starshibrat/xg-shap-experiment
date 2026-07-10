@@ -71,14 +71,14 @@ def cast_to_string_categorical_data(df: pd.DataFrame):
         df[col] = df[col].astype(dtype="Int8").astype("str")
 
 def load_dummy_xgb_parameter():
-    base_score =  0.5
-    objective =  "binary:logistic"
-    random_state =  1
-    max_depth =  1
-    n_estimators =  5
-    eta =  0.1
-    enable_categorical =  True
-    max_cat_to_one_hot =  1
+    base_score = 0.5
+    objective = "binary:logistic"
+    random_state = 1
+    max_depth = 1
+    n_estimators = 5
+    eta = 0.1
+    enable_categorical = True
+    max_cat_to_one_hot = 1
     reg_lambda = 0.1
     min_child_weight = 0
 

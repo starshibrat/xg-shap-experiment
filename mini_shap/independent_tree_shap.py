@@ -357,7 +357,7 @@ class IndependentTreeExplainer:
                 pos = self._calc_weight(V, U - 1) * cur_tree.values[node_index]
             if U != V:
                 neg = -self._calc_weight(V, U) * cur_tree.values[node_index]
-            
+
             return pos * c_samples , neg * c_samples
         
         split_idx = cur_tree.features[node_index]

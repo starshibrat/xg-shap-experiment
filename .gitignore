@@ -5,3 +5,4 @@ datasets/lending_club
 notebook/*.scratch.ipynb
 dump.txt
 notebook/*.scratch.csv
+*.scratch.*

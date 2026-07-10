@@ -1,24 +1,25 @@
 import numpy as np
 from math import factorial
 from typing import Tuple
+from common.common import sigmoid
+from tree.xg_classifier import XGClassifier
+from tree.single_tree import SingleTree
 
 class IndependentTreeExplainer:
-    def __init__(self, model, refset=None, verbose=False,):
+    def __init__(self, model, refset=None, verbose=False, model_output: str='raw'):
 
         if refset is None or len(refset) == 0:
             assert("refset must not be empty!")
 
-        self.features = model.features
-        self.thresholds = model.thresholds
-        self.values = model.values
-        self.children_left = model.children_left
-        self.children_right = model.children_right
-        self.is_leaf = model.is_leaf
-        self.categorical_features = model.categorical_features
-        self.is_categorical = model.is_categorical
-        self.missing_go_left = model.missing_go_left
         self.verbose = verbose
         self.refset = refset
+        self.model_output = model_output
+        self.model = model
+
+        if model_output == 'raw':
+            self.expected_value = model.predict_raw(self.refset).mean()
+        elif model_output == 'probability':
+            self.expected_value = sigmoid(model.predict_raw(self.refset)).mean()
 
     def _calc_weight(self, d: int, k: int):
 
@@ -342,7 +343,7 @@ class IndependentTreeExplainer:
         
         return phi / self.refset.shape[0]
     
-    def _full_vectorized_recurse(self, x_indices: np.ndarray, c_indices: np.ndarray, node_index: int, U: int, V:int, xlist: list, clist: list, X: np.ndarray, C: np.ndarray, phi: np.ndarray) -> Tuple[np.float32, np.float32]:
+    def _full_vectorized_recurse(self, x_indices: np.ndarray, c_indices: np.ndarray, node_index: int, U: int, V:int, xlist: list, clist: list, X: np.ndarray, C: np.ndarray, phi: np.ndarray, cur_tree: SingleTree) -> Tuple[np.float32, np.float32]:
 
         x_samples = len(x_indices)
         c_samples = len(c_indices)
@@ -350,18 +351,18 @@ class IndependentTreeExplainer:
         if x_samples == 0 or c_samples == 0:
             return 0, 0
         
-        if self.is_leaf[node_index]:
+        if cur_tree.is_leaf[node_index]:
             pos, neg = 0.0, 0.0
             if U != 0:
-                pos = self._calc_weight(V, U - 1) * self.values[node_index]
+                pos = self._calc_weight(V, U - 1) * cur_tree.values[node_index]
             if U != V:
-                neg = -self._calc_weight(V, U) * self.values[node_index]
+                neg = -self._calc_weight(V, U) * cur_tree.values[node_index]
             
             return pos * c_samples , neg * c_samples
         
-        split_idx = self.features[node_index]
-        threshold = self.thresholds[node_index]
-        missing_default_left = self.missing_go_left[node_index]
+        split_idx = cur_tree.features[node_index]
+        threshold = cur_tree.thresholds[node_index]
+        missing_default_left = cur_tree.missing_go_left[node_index]
 
         x_vals = X[x_indices, split_idx]
         c_vals = C[c_indices, split_idx]
@@ -388,8 +389,8 @@ class IndependentTreeExplainer:
         c_left_indices = c_indices[c_left_mask]
         c_right_indices = c_indices[c_right_mask]
         
-        a = self.children_right[node_index]
-        b = self.children_left[node_index]
+        a = cur_tree.children_right[node_index]
+        b = cur_tree.children_left[node_index]
 
         pos_out = np.zeros(len(x_indices), dtype=np.float32)
         neg_out = np.zeros(len(x_indices), dtype=np.float32)
@@ -397,13 +398,13 @@ class IndependentTreeExplainer:
         if clist[split_idx] > 0:
 
             if np.any(c_left_mask):
-                p, n = self._full_vectorized_recurse(x_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
+                p, n = self._full_vectorized_recurse(x_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out += p
                 neg_out += n
             
             if np.any(c_right_mask):
-                p, n = self._full_vectorized_recurse(x_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+                p, n = self._full_vectorized_recurse(x_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out += p
                 neg_out += n
@@ -413,16 +414,16 @@ class IndependentTreeExplainer:
         if xlist[split_idx] > 0:
 
             if np.any(x_left_mask):
-                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
-                p_r, n_r = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U, V, xlist, clist, X, C, phi)
+                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi, cur_tree)
+                p_r, n_r = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out[x_left_mask] += p_l + p_r
                 neg_out[x_left_mask] += n_l + n_r
 
             
             if np.any(x_right_mask):
-                p_l, n_l = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U, V, xlist, clist, X, C, phi)
-                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+                p_l, n_l = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U, V, xlist, clist, X, C, phi, cur_tree)
+                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out[x_right_mask] += p_r + p_l
                 neg_out[x_right_mask] += n_r + n_l
@@ -432,18 +433,18 @@ class IndependentTreeExplainer:
         
         if len(c_left_indices) > 0:
             if len(x_left_indices) > 0:
-                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi)
+                p_l, n_l = self._full_vectorized_recurse(x_left_indices, c_left_indices, b, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out[x_left_mask] += p_l
                 neg_out[x_left_mask] += n_l
             
             if len(x_right_indices) > 0:
                 xlist[split_idx] += 1
-                posx, negx = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U + 1, V + 1, xlist, clist, X, C, phi)
+                posx, negx = self._full_vectorized_recurse(x_right_indices, c_left_indices, a, U + 1, V + 1, xlist, clist, X, C, phi, cur_tree)
                 xlist[split_idx] -= 1
 
                 clist[split_idx] += 1
-                posc, negc = self._full_vectorized_recurse(x_right_indices, c_left_indices, b, U, V + 1, xlist, clist, X, C, phi)
+                posc, negc = self._full_vectorized_recurse(x_right_indices, c_left_indices, b, U, V + 1, xlist, clist, X, C, phi, cur_tree)
                 clist[split_idx] -= 1
                 
                 phi[x_right_indices, split_idx] += posx + negc
@@ -452,18 +453,18 @@ class IndependentTreeExplainer:
         
         if len(c_right_indices) > 0:
             if len(x_right_indices) > 0:
-                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi)
+                p_r, n_r = self._full_vectorized_recurse(x_right_indices, c_right_indices, a, U, V, xlist, clist, X, C, phi, cur_tree)
 
                 pos_out[x_right_mask] += p_r
                 neg_out[x_right_mask] += n_r
             
             if len(x_left_indices) > 0:
                 xlist[split_idx] += 1
-                posx, negx = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U + 1, V + 1, xlist, clist, X, C, phi)
+                posx, negx = self._full_vectorized_recurse(x_left_indices, c_right_indices, b, U + 1, V + 1, xlist, clist, X, C, phi, cur_tree)
                 xlist[split_idx] -= 1
 
                 clist[split_idx] += 1
-                posc, negc = self._full_vectorized_recurse(x_left_indices, c_right_indices, a, U, V + 1, xlist, clist, X, C, phi)
+                posc, negc = self._full_vectorized_recurse(x_left_indices, c_right_indices, a, U, V + 1, xlist, clist, X, C, phi, cur_tree)
                 clist[split_idx] -= 1
 
                 phi[x_left_indices, split_idx] += posx + negc
@@ -471,16 +472,28 @@ class IndependentTreeExplainer:
                 pos_out[x_left_mask] += posx + posc
                 neg_out[x_left_mask] += negx + negc
         
-
         return pos_out, neg_out
     
     def full_vectorized_explain(self, X: np.ndarray) -> np.ndarray:
-        phi = np.zeros_like(X, dtype=np.float32)
-        xlist = [0 for _ in range(self.refset.shape[1])]
-        clist = [0 for _ in range(self.refset.shape[1])]
+        shap_values = np.zeros_like(X)
 
-        self._full_vectorized_recurse(np.arange(X.shape[0]), np.arange(self.refset.shape[0]), 0, 0, 0, xlist, clist, X, self.refset, phi)
+        if isinstance(self.model, XGClassifier):
+            for t in self.model.trees:
+                xlist = [0 for _ in range(self.refset.shape[1])]
+                clist = [0 for _ in range(self.refset.shape[1])]
+                phi = np.zeros_like(X, dtype=np.float32)
+
+                self._full_vectorized_recurse(np.arange(X.shape[0]), np.arange(self.refset.shape[0]), 0, 0, 0, xlist, clist, X, self.refset, phi, t)
+                shap_values += phi / self.refset.shape[0]
+        elif isinstance(self.model, SingleTree):
+            xlist = [0 for _ in range(self.refset.shape[1])]
+            clist = [0 for _ in range(self.refset.shape[1])]
+            phi = np.zeros_like(X, dtype=np.float32)
+
+            self._full_vectorized_recurse(np.arange(X.shape[0]), np.arange(self.refset.shape[0]), 0, 0, 0, xlist, clist, X, self.refset, phi, self.model)
+
+            shap_values = phi / self.refset.shape[0]
         
-        return phi / self.refset.shape[0]
+        return shap_values
     
     

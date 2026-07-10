@@ -1,11 +1,6 @@
-from mini_shap.independent_tree_shap import IndependentTreeExplainer
-import pandas as pd
 import unittest
 from tree.xg_classifier import XGClassifier
 import numpy as np
-from sklearn.model_selection import train_test_split
-from pathlib import Path
-from datetime import datetime
 from common.helper import *
 
 class TestXGClassifier(unittest.TestCase):
@@ -30,30 +25,6 @@ class TestXGClassifier(unittest.TestCase):
             index += 1
             self.assertEqual(t, np.True_)
     
-    def test_conversion_model_shap_value(self):
-        X_train, X_test, y_train, y_test, scale_pos_weight = load_data_and_scale_pos_weight(100000, cast_string=True)
-        X_train_np, X_test_np, y_train_np, y_test_np = X_train.to_numpy().astype(np.float32), X_test.to_numpy().astype(np.float32), y_train.to_numpy().astype(np.float32), y_test.to_numpy().astype(np.float32)
-
-        m1 = load_dummy_lib_classifier(scale_pos_weight, md=4, ntree=50)
-        m1.fit(X_train, y_train)
-
-        m2 = XGClassifier.load_from_xgbclassifier(m1, columns=list(X_train.columns))
-
-        pred_raw1 = m1.predict(X_test, output_margin=True)
-
-        indices = np.random.choice(len(X_train_np), 1000, replace=False)
-
-        base_value, shap_value = m2.calculate_interventional_shap(X_test_np, X_train_np[indices])
-        shap_sum = shap_value.sum(axis=1) + base_value
-
-        index = 0
-
-        for t in np.isclose(pred_raw1, shap_sum, rtol=1e-2):
-            if not t:
-                print(f"FAIL TEST: {pred_raw1[index]} != {shap_sum[index]}")
-            
-            index += 1
-            self.assertEqual(t, np.True_)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,6 @@ from collections import deque
 import graphviz
 import xgboost as xgb
 import pandas as pd
-from mini_shap.independent_tree_shap import IndependentTreeExplainer
 
 class SingleTree:
     def __init__(self, 
@@ -47,7 +46,7 @@ class SingleTree:
 
 
     @classmethod
-    def load_from_booster(cls, booster: xgb.Booster, columns: list[str]) -> SingleTree:
+    def load_from_booster(cls, booster: xgb.Booster, columns: list[str]=None) -> SingleTree:
         dframe = booster.trees_to_dataframe()
         dframe.set_index("ID", inplace=True)
 
@@ -122,11 +121,12 @@ class SingleTree:
                 for i in range(len(t)):
                     t[i] = int(t[i])
 
-        for i in range(len(features)):
-            feature_name = features[i]
+        if columns:
+            for i in range(len(features)):
+                feature_name = features[i]
 
-            if isinstance(feature_name, str):
-                features[i] = columns.index(feature_name)
+                if isinstance(feature_name, str):
+                    features[i] = columns.index(feature_name)
 
         tree = SingleTree(max_depth=0, grad=[], hess=[])
 
@@ -516,11 +516,6 @@ class SingleTree:
         
         return explainer.vectorized_shap_values(X), explainer.expected_value
     
-    def calculate_interventional_shap(self, foreground_sample: np.ndarray, background_sample: np.ndarray) -> np.ndarray:
-        tree_explainer = IndependentTreeExplainer(model=self, refset=background_sample)
-        shap_value = tree_explainer.full_vectorized_explain(foreground_sample)
-
-        return shap_value
     
     def plot_custom_tree(self, filename="tree_plot", feature_names=None):
         dot = graphviz.Digraph(name=filename, format='png')

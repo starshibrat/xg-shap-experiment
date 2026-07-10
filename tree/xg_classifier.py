@@ -45,8 +45,21 @@ class XGClassifier:
         self.base_score = base_score
 
     @classmethod
-    def load_from_xgbclassifier(cls, model: xgb.XGBClassifier, columns: list[str]) -> XGClassifier:
+    def load_from_xgbclassifier(cls, model: xgb.XGBClassifier, columns: list[str]=None) -> XGClassifier:
         booster = model.get_booster()
+        trees = []
+
+        for i in range(booster.num_boosted_rounds()):
+            st = SingleTree.load_from_booster(booster[i], columns)
+            trees.append(st)
+        
+        m = XGClassifier()
+        m.trees = trees
+
+        return m
+    
+    @classmethod
+    def load_from_booster(cls, booster: xgb.Booster, columns: list[str]) -> XGClassifier:
         trees = []
 
         for i in range(booster.num_boosted_rounds()):
@@ -206,11 +219,12 @@ class XGClassifier:
         
         return total_shap_value, expected_value
     
-    def calculate_interventional_shap(self, foreground_sample: np.ndarray, background_sample: np.ndarray) -> Tuple[np.float64, np.ndarray]:
-        base_value = self.predict_raw(background_sample).mean()
-        shap_value = np.zeros_like(foreground_sample)
+    # def calculate_interventional_shap(self, foreground_sample: np.ndarray, background_sample: np.ndarray, model_output: str='raw') -> Tuple[np.float64, np.ndarray]:
+    #     # base_value = self.predict_raw(background_sample).mean()
+    #     # shap_value = np.zeros_like(foreground_sample)
 
-        for t in self.trees:
-            shap_value += t.calculate_interventional_shap(foreground_sample, background_sample)
+    #     explanation = IndependentTreeExplainer(self, refset=background_sample, model_output=model_output)
+
+    #     shap_values = explanation.full_vectorized_explain(foreground_sample)
         
-        return base_value, shap_value
+    #     return explanation.expected_value, shap_values

@@ -12,6 +12,12 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
         max_cat_to_onehot: int=1,
         objective: str='binary:logistic',
         base_score: float=0.5,
+        min_child_weight: float=1.0,
+        subsample: float=1.0,
+        colsample_bytree: float=1.0,
+        gamma: float = 0.0,
+        reg_lambda :float = 1.0,
+        reg_alpha :float = 0,
         verbose: int=0,
     ):
         self.max_depth = max_depth
@@ -22,6 +28,12 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
         self.max_cat_to_onehot = max_cat_to_onehot
         self.objective = objective
         self.base_score = base_score
+        self.min_child_weight = min_child_weight
+        self.subsample = subsample
+        self.colsample_bytree = colsample_bytree
+        self.gamma = gamma
+        self.reg_lambda = reg_lambda
+        self.reg_alpha = reg_alpha
         self.verbose = verbose
 
     def fit(self, X, y, **fit_params):
@@ -49,6 +61,12 @@ class CustomXGBClassifier(ClassifierMixin, BaseEstimator):
             max_cat_to_onehot = self.max_cat_to_onehot,
             objective = self.objective,
             base_score = self.base_score,
+            min_child_weight = self.min_child_weight,
+            subsample = self.subsample,
+            colsample_bytree = self.colsample_bytree,
+            gamma = self.gamma,
+            reg_lambda = self.reg_lambda,
+            reg_alpha = self.reg_alpha,
         )
 
         model.fit(X, y, **fit_params)

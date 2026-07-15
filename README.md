@@ -11,7 +11,7 @@ Necessary tests are passed successfully. You can run commands below:
 make test_indshap
 make test_xgc
 ```
-As for official_library_test.py are not considered to be a test for the implementation, since it's for reference that obatained from official library (https://github.com/shap/shap/blob/master/tests/explainers/test_tree.py)
+As for official_library_test.py are not considered to be a test for the implementation, since it's for reference that obtained from official library (https://github.com/shap/shap/blob/master/tests/explainers/test_tree.py)
 
 
 Installing the necessary libraries

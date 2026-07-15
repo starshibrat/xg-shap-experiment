@@ -7,16 +7,23 @@ from tree.xg_classifier import XGClassifier
 from typing import Tuple
 
 def load_brfss(
-    dataset_version: str = None
+    dataset_version: str = None,
+    columns: list[str] = None,
 ):
     if dataset_version is None:
         dataset_version = "v3"
-
+    
     current_dir = Path(__file__).parent
     file_path = current_dir / f"../datasets/BRFSS/out_{dataset_version}.parquet"
     df = pd.read_parquet(file_path.resolve())
 
-    return df
+    if columns is None:
+        columns = list(df.columns)
+    else:
+        if not ("DIABETES" in columns):
+            columns.insert(0, "DIABETES")
+
+    return df[columns]
 
 def calculate_scale_pos_weight(
     y: Tuple[pd.Series, np.ndarray]
@@ -40,8 +47,9 @@ def load_data_and_scale_pos_weight(
         cast_string=False,
         tsize: np.float32=0.2,
         rdstate: int=1,
+        columns: list[str]=None
 ):
-        df = load_brfss()
+        df = load_brfss(columns=columns)
 
         if cast_string:
             cast_to_string_categorical_data(df)

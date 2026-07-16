@@ -385,18 +385,28 @@ def build_cast_column_filter(dataset_name: int, columns: list[str], cast=pl.UInt
 
     return fls
 
-def build_diabetes_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+def build_diabetes_filter(lf: pl.LazyFrame, dataset_name: int, keep_missing: bool=False) -> pl.LazyFrame:
     col = get_value_from_universal_dict(dataset_name, "diabetes")
-    a = build_filter(col, "notin", [1, 2, 3, 4])
-    b = build_filter(col, "isnull")
-    ft = build_chain_filter([a, b], "|")
 
-    lf = lf.remove(ft)
+    if not keep_missing:
+        a = build_filter(col, "notin", [1, 2, 3, 4])
+        b = build_filter(col, "isnull")
+        ft = build_chain_filter([a, b], "|")
+
+        lf = lf.remove(ft)
+    else:
+        a = build_filter(col, "in", [7, 9])
+        ft1 = build_when(a, col, None)
+        lf = lf.with_columns(ft1)
 
     ft2 = build_filter(col, "in", [1, 2])
-    ft2 = build_when(ft2, col, 1, 0)
+    ft2 = build_when(ft2, col, 1)
+
+    ft3 = build_filter(col, "in", [3, 4])
+    ft3 = build_when(ft3, col, 0)
 
     lf = lf.with_columns(ft2)
+    lf = lf.with_columns(ft3)
 
     return lf
 
@@ -417,12 +427,8 @@ def build_rename_filter(dataset_name: int) -> dict:
     for k, v in mp_common.items():
         rename_mp[v] = k.upper()
     
-    # rename_mp["COMORBIDITY_COUNT"] = "COMORBIDITY_COUNT"
-    # rename_mp["DISABILITY_COUNT"] = "DISABILITY_COUNT"
     rename_mp["CANCER_DIAGNOSIS"] = "CANCER_DIAGNOSIS"
 
-    # rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in disability}
-    # rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in chronic_condition}
     rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in cancer_condition}
 
     return rename_mp
@@ -552,7 +558,7 @@ def recode_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
 
     return lf.with_columns(fts)
     
-def clean_dataset(dataset_name: int):
+def clean_dataset(dataset_name: int, keep_missing_target: bool=False):
 
     brfss_dataset_path = "../datasets/BRFSS/"
     brfss_path = brfss_dataset_path + f"{dataset_name}.parquet"
@@ -562,7 +568,7 @@ def clean_dataset(dataset_name: int):
         missing_columns='insert'
     )
 
-    lf = build_diabetes_filter(lf, dataset_name)
+    lf = build_diabetes_filter(lf, dataset_name, keep_missing_target)
 
     missing_filter = build_missing_dataset_filter(dataset_name, skip_columns=["age"])
 
@@ -578,8 +584,6 @@ def clean_dataset(dataset_name: int):
         income_filter = build_income_filter(dataset_name)
         lf = lf.with_columns(income_filter)
     
-    # lf = build_comorbidity_count_filter(lf, dataset_name)
-    # lf = build_disability_count_filter(lf, dataset_name)
     lf = build_cancer_diagnosa_filter(lf, dataset_name)
     lf = build_employment_filter(lf, dataset_name)
     lf = build_marital_filter(lf, dataset_name)

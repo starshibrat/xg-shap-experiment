@@ -218,13 +218,3 @@ class XGClassifier:
             print(f"batch {i}~{min(i + batch_size, n_samples)} done.")
         
         return total_shap_value, expected_value
-    
-    # def calculate_interventional_shap(self, foreground_sample: np.ndarray, background_sample: np.ndarray, model_output: str='raw') -> Tuple[np.float64, np.ndarray]:
-    #     # base_value = self.predict_raw(background_sample).mean()
-    #     # shap_value = np.zeros_like(foreground_sample)
-
-    #     explanation = IndependentTreeExplainer(self, refset=background_sample, model_output=model_output)
-
-    #     shap_values = explanation.full_vectorized_explain(foreground_sample)
-        
-    #     return explanation.expected_value, shap_values

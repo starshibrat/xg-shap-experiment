@@ -136,3 +136,14 @@ def load_dummy_scratch_classifier(scale_pos_weight: np.float32=1, md: int=None) 
 
     return m
 
+def load_shap_values(filename: str=None) -> Tuple[np.float64, np.ndarray]:
+    if filename is None:
+        assert("filename must be specified")
+
+    with open(filename, 'rb') as f:
+        arr = np.load(f)
+
+    expected_value = arr[-1, 0]
+    shap_values = arr[ : -1]
+
+    return expected_value, shap_values

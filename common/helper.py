@@ -147,3 +147,50 @@ def load_shap_values(filename: str=None) -> Tuple[np.float64, np.ndarray]:
     shap_values = arr[ : -1]
 
     return expected_value, shap_values
+
+def map_feature_label(
+    dataframe: pd.DataFrame,
+    column_name: str,
+    labels: dict,
+    dropna: bool=True,
+):
+    if not dropna:
+        labels[np.nan] = "Missing"
+
+    dataframe[column_name] = dataframe[column_name].map(labels)
+    return dataframe
+
+def map_target_variable(dataframe):
+    dataframe = map_feature_label(dataframe, "DIABETES", {
+        0: "Non-Diabetes",
+        1: "Diabetes"        
+    })
+
+    return dataframe
+
+def _binary_label(reverse: bool=False):
+    if reverse:
+        return {
+            1: "Ya",
+            0: "Tidak"
+        }
+
+    return {
+        0: "Ya",
+        1: "Tidak"
+    }
+
+def map_binary_variable(dataframe, column_name, custom_label: dict=None, reverse: bool=False, dropna: bool=False):
+    labels = _binary_label(reverse)
+
+    if custom_label is not None:
+        labels = custom_label
+
+    dataframe = map_feature_label(
+        dataframe=dataframe,
+        column_name=column_name,
+        labels=labels,
+        dropna=dropna
+    )
+
+    return dataframe

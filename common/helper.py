@@ -7,14 +7,16 @@ from tree.xg_classifier import XGClassifier
 from typing import Tuple
 
 def load_brfss(
-    dataset_version: str = None,
-    columns: list[str] = None,
+    dataset_path: str=None,
+    columns: list[str]=None,
 ):
-    if dataset_version is None:
-        dataset_version = "v3"
-    
-    current_dir = Path(__file__).parent
-    file_path = current_dir / f"../datasets/BRFSS/out_{dataset_version}.parquet"
+    if dataset_path is None:
+        current_dir = Path(__file__).parent
+        file_path = current_dir / f"../datasets/BRFSS/out_v3.parquet"
+        
+    else:
+        file_path = Path(dataset_path)
+
     df = pd.read_parquet(file_path.resolve())
 
     if columns is None:
@@ -47,9 +49,11 @@ def load_data_and_scale_pos_weight(
         cast_string=False,
         tsize: np.float32=0.2,
         rdstate: int=1,
-        columns: list[str]=None
+        columns: list[str]=None,
+        dataset_path: str=None,
+        return_as_X_y: bool=False
 ):
-        df = load_brfss(columns=columns)
+        df = load_brfss(columns=columns, dataset_path=dataset_path)
 
         if cast_string:
             cast_to_string_categorical_data(df)
@@ -59,6 +63,9 @@ def load_data_and_scale_pos_weight(
 
         y = df.iloc[:size, 0]
         X = df.iloc[:size, 1:].astype("category")
+
+        if return_as_X_y:
+            return X, y
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=rdstate, test_size=tsize, stratify=y)
 

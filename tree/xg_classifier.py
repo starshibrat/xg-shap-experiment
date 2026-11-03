@@ -43,6 +43,7 @@ class XGClassifier:
         self.categorical_features = categorical_features
         self.scale_pos_weight = scale_pos_weight
         self.base_score = base_score
+        self.base_score_log_odds = np.log(base_score/(1-base_score))
 
     @classmethod
     def load_from_xgbclassifier(cls, model: xgb.XGBClassifier, columns: list[str]=None) -> XGClassifier:
@@ -52,8 +53,12 @@ class XGClassifier:
         for i in range(booster.num_boosted_rounds()):
             st = SingleTree.load_from_booster(booster[i], columns)
             trees.append(st)
+
+        if isinstance(model.base_score, float):
+            m = XGClassifier(base_score=model.base_score)
+        else:
+            m = XGClassifier(base_score=model.base_score[0])
         
-        m = XGClassifier()
         m.trees = trees
 
         return m
@@ -180,7 +185,7 @@ class XGClassifier:
             if self.verbose:
                     print(f"\n{i + 1}th tree")
                     print(f"\nres={pred}\n")
-        return pred
+        return self.base_score_log_odds + pred
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         res = common.sigmoid(self.predict_raw(X))

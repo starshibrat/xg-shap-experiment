@@ -1,5 +1,4 @@
 import numpy as np
-from mini_shap.dogwater_tree_shap import DogwaterTreeExplainer
 from collections import deque
 import graphviz
 import xgboost as xgb
@@ -510,12 +509,6 @@ class SingleTree:
             queue.append((self.children_right[node_index], right_indices))
         
         return res
-    
-    def calculate_shap(self, X):
-        explainer = DogwaterTreeExplainer(model=self)
-        
-        return explainer.vectorized_shap_values(X), explainer.expected_value
-    
     
     def plot_custom_tree(self, filename="tree_plot", feature_names=None):
         dot = graphviz.Digraph(name=filename, format='png')

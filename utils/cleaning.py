@@ -427,9 +427,10 @@ def build_rename_filter(dataset_name: int) -> dict:
     for k, v in mp_common.items():
         rename_mp[v] = k.upper()
     
-    rename_mp["CANCER_DIAGNOSIS"] = "CANCER_DIAGNOSIS"
+    # rename_mp["CANCER_DIAGNOSIS"] = "CANCER_DIAGNOSIS"
 
-    rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in cancer_condition}
+    # rename_mp = {k: v for k,v in rename_mp.items() if v.lower() not in cancer_condition}
+    rename_mp = {k: v for k,v in rename_mp.items() if v.lower()}
 
     return rename_mp
 
@@ -522,32 +523,68 @@ def build_cancer_diagnosa_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.Lazy
 
     return lf.with_columns(ft)
 
-def build_marital_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+def build_marital_filter(lf: pl.LazyFrame, dataset_name: int, cdc_scheme_grouping: bool=False) -> pl.LazyFrame:
     marital_col = get_value_from_universal_dict(dataset_name, "marital")
 
-    ft1 = build_filter(marital_col, op="eq", value=1)
-    ft2 = build_filter(marital_col, op="in", value=[2, 3, 4, 5, 6])
+    if cdc_scheme_grouping:
+        # 0 = Married/Unmarried Couple
+        # 1 = Divorced/Separated
+        # 2 = Widowed
+        # 3 = Never Married
+        ft1 = build_filter(marital_col, op="in", value=[1, 6])
+        ft2 = build_filter(marital_col, op="in", value=[2, 4])
+        ft3 = build_filter(marital_col, op="eq", value=3)
+        ft4 = build_filter(marital_col, op="eq", value=5)
+        
+        ft = pl.when(ft1).then(0).when(ft2).then(1).when(ft3).then(2).when(ft4).then(3).otherwise(marital_col).alias(marital_col)
+        
+        return lf.with_columns(ft)
 
-    ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(marital_col).alias(marital_col)
+    else:
+        ft1 = build_filter(marital_col, op="eq", value=1)
+        ft2 = build_filter(marital_col, op="in", value=[2, 3, 4, 5, 6])
 
-    return lf.with_columns(ft)
+        ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(marital_col).alias(marital_col)
 
-def build_employment_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+        return lf.with_columns(ft)
+
+def build_employment_filter(lf: pl.LazyFrame, dataset_name: int, cdc_scheme_grouping: bool=False) -> pl.LazyFrame:
     employment_col = get_value_from_universal_dict(dataset_name, "employment")
 
-    ft1 = build_filter(employment_col, op="in", value=[1, 2])
-    ft2 = build_filter(employment_col, op="in", value=[3, 4, 5, 6, 7, 8])
+    if cdc_scheme_grouping:
+        # 0 = Employed
+        # 1 = Out of Work
+        # 2 = Unable to Work
+        # 3 = Other* (homemaker, student, retirees)
 
-    ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(employment_col).alias(employment_col)
+        ft1 = build_filter(employment_col, op="in", value=[1, 2])
+        ft2 = build_filter(employment_col, op="in", value=[3, 4])
+        ft3 = build_filter(employment_col, op="eq", value=8)
+        ft4 = build_filter(employment_col, op="in", value=[5, 6, 7])
+        
+        ft = pl.when(ft1).then(0).when(ft2).then(1).when(ft3).then(2).when(ft4).then(3).otherwise(employment_col).alias(employment_col)
+        
+        return lf.with_columns(ft)
+    else:
+        ft1 = build_filter(employment_col, op="in", value=[1, 2])
+        ft2 = build_filter(employment_col, op="in", value=[3, 4, 5, 6, 7, 8])
 
-    return lf.with_columns(ft)
+        ft = pl.when(ft1).then(1).when(ft2).then(0).otherwise(employment_col).alias(employment_col)
 
-def recode_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
+        return lf.with_columns(ft)
+
+def recode_filter(lf: pl.LazyFrame, dataset_name: int, filter_employment: bool=True, filter_marital: bool=True) -> pl.LazyFrame:
     recode_variables = ["sex", "income", "arthritis", "highbp", "highchol", "drink", "insurance", "age", "race", "education", "bmi", "health", "physical", "mental", "smoker", "exercise", "veteran", 
     "heart", "stroke", "asthma",
     "emphysema", "kidney", "depression", 
-    "deaf", "blind", "concentration", "diffwalk", "diffdres", "diffalon"
+    "deaf", "blind", "concentration", "diffwalk", "diffdres", "diffalon", "skincancer", "otcancer",
     ]
+
+    if not filter_employment:
+        recode_variables += ["employment"]
+
+    if not filter_marital:
+        recode_variables += ["marital"]
 
     fts = []
 
@@ -558,7 +595,7 @@ def recode_filter(lf: pl.LazyFrame, dataset_name: int) -> pl.LazyFrame:
 
     return lf.with_columns(fts)
     
-def clean_dataset(dataset_name: int, keep_missing_target: bool=False):
+def clean_dataset(dataset_name: int, keep_missing_target: bool=False, filter_employment: bool=True, filter_marital: bool=True, cdc_scheme_employment: bool=False, cdc_scheme_marital: bool=False):
 
     brfss_dataset_path = "../datasets/BRFSS/"
     brfss_path = brfss_dataset_path + f"{dataset_name}.parquet"
@@ -584,10 +621,14 @@ def clean_dataset(dataset_name: int, keep_missing_target: bool=False):
         income_filter = build_income_filter(dataset_name)
         lf = lf.with_columns(income_filter)
     
-    lf = build_cancer_diagnosa_filter(lf, dataset_name)
-    lf = build_employment_filter(lf, dataset_name)
-    lf = build_marital_filter(lf, dataset_name)
-    lf = recode_filter(lf, dataset_name)
+    # lf = build_cancer_diagnosa_filter(lf, dataset_name)
+    if filter_employment:
+        lf = build_employment_filter(lf, dataset_name, cdc_scheme_employment)
+
+    if filter_marital:
+        lf = build_marital_filter(lf, dataset_name, cdc_scheme_marital)
+
+    lf = recode_filter(lf, dataset_name, filter_employment, filter_marital)
     
     rename_filter = build_rename_filter(dataset_name)
 
